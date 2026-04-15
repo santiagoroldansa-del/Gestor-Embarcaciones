@@ -1,0 +1,6 @@
+      PID    PPID    PGID     WINPID   TTY         UID    STIME COMMAND
+     1249       1    1249      24712  cons0     197609 14:56:25 /usr/bin/bash
+     1242    1200    1242      21380  pty0      197609 14:42:56 /c/Program Files/nodejs/node
+     1200    1199    1200      11612  pty0      197609 14:39:58 /usr/bin/bash
+     1199       1    1199      25012  ?         197609 14:39:58 /usr/bin/mintty
+     1309    1249    1309      10948  cons0     197609 14:57:14 /usr/bin/PS

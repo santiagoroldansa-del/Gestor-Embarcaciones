@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NaviGestor</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ═══ LOGIN ══════════════════════════════════════════════════════════════ -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-logo-area">
+        <span class="login-logo">&#9875;</span>
+        <h1>NaviGestor</h1>
+        <p>Sistema de Gestion de Embarcaciones</p>
+      </div>
+      <form id="formLogin">
+        <div class="form-group">
+          <label>Correo electronico</label>
+          <input type="email" id="loginEmail" required placeholder="usuario@guarderia.com" autocomplete="email" />
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label>Contrasena</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <p class="login-error" id="loginError" hidden></p>
+        <button type="submit" class="btn btn-primary btn-full" id="loginBtn" style="margin-top:20px">Entrar</button>
+        <p style="text-align:center;margin-top:14px;font-size:13px">
+          <a href="#" id="linkForgotPassword" style="color:var(--accent)">&#191;Olvidaste tu contrasena?</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══ APP SHELL ══════════════════════════════════════════════════════════ -->
+  <div class="app-shell app-hidden" id="appShell">
+
+    <!-- ── BARRA SUPERIOR ─────────────────────────────────────────────────── -->
+    <nav class="topnav">
+
+      <!-- Brand -->
+      <div class="topnav-brand">
+        <img src="logo.png" alt="NaviGestor" class="brand-logo" onerror="this.style.display='none'" />
+        <span class="brand-name" id="nombreGuarderia">NaviGestor</span>
+      </div>
+
+      <!-- Pestañas de navegación -->
+      <div class="topnav-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="inicio" role="tab" aria-selected="true">
+          <span class="tab-icon">&#9875;</span>
+          <span class="tab-label">Inicio</span>
+        </button>
+        <button class="tab-btn" data-tab="clientes" role="tab" aria-selected="false">
+          <span class="tab-icon">&#128100;</span>
+          <span class="tab-label">Clientes</span>
+        </button>
+        <button class="tab-btn" data-tab="facturacion" role="tab" aria-selected="false">
+          <span class="tab-icon">&#128196;</span>
+          <span class="tab-label">Facturacion</span>
+        </button>
+        <button class="tab-btn" data-tab="reportes" role="tab" aria-selected="false">
+          <span class="tab-icon">&#128202;</span>
+          <span class="tab-label">Reportes</span>
+        </button>
+        <button class="tab-btn" data-tab="categorias" role="tab" aria-selected="false">
+          <span class="tab-icon">&#127991;</span>
+          <span class="tab-label">Categorias</span>
+        </button>
+        <button class="tab-btn tab-settings" data-tab="configuracion" role="tab" aria-selected="false" title="Configuracion">
+          <span class="tab-icon">&#9881;</span>
+          <span class="tab-label tab-label-sm">Config</span>
+        </button>
+      </div>
+
+      <!-- Usuario -->
+      <div class="topnav-user">
+        <span class="user-email" id="userEmail"></span>
+        <button class="btn-logout-top" id="btnLogout">&#8594; Salir</button>
+      </div>
+    </nav>
+
+    <!-- ── CONTENIDO DE PESTAÑAS ──────────────────────────────────────────── -->
+    <div class="tab-content">
+
+      <!-- ══ PESTAÑA: INICIO ══════════════════════════════════════════════════ -->
+      <div class="tab-panel active" id="tab-inicio" role="tabpanel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Embarcaciones</h2>
+            <p class="panel-sub">Vista operativa de la flota</p>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <input type="text" class="search-input" id="searchEmbarcaciones" placeholder="Buscar embarcacion..." />
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" id="btnExportarEmbarcacionesCSV">&#8659; Exportar CSV</button>
+            <button class="btn btn-primary" id="btnNuevaEmbarcacion">+ Nueva Embarcacion</button>
+          </div>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Matricula</th>
+                <th>Categoria</th>
+                <th>Estado</th>
+                <th>Propietario</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaEmbarcaciones">
+              <tr><td colspan="6" class="empty-row">Sin embarcaciones registradas</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── Últimos Movimientos ─────────────────────────────────────────── -->
+        <div class="panel-header" style="margin-top:28px">
+          <div>
+            <h2 class="panel-title">&#128197; Últimos Movimientos</h2>
+            <p class="panel-sub">Pagos e ingresos extra registrados recientemente</p>
+          </div>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Concepto</th>
+                <th>Cliente</th>
+                <th>Monto</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody id="tablaUltimosMovimientos">
+              <tr><td colspan="5" class="empty-row">Sin movimientos recientes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ PESTAÑA: CLIENTES ═════════════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-clientes" role="tabpanel">
+
+        <!-- ── Clientes ─────────────────────────────────────────────────── -->
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Clientes</h2>
+            <p class="panel-sub">Gestion de cuentas y saldos</p>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <div class="clientes-select-bar">
+            <select class="filter-select" id="sortClienteNombre">
+              <option value="">Ordenar por Nombre</option>
+              <option value="az">Nombre A &#8594; Z</option>
+              <option value="za">Nombre Z &#8594; A</option>
+            </select>
+            <select class="filter-select" id="filtroEstadoCliente">
+              <option value="">Todos los estados</option>
+              <option value="aldia">Al Dia</option>
+              <option value="deudor">Deudor</option>
+            </select>
+            <select class="filter-select" id="sortClienteDeuda">
+              <option value="">Monto Deuda</option>
+              <option value="mayor">Mayor primero</option>
+              <option value="menor">Menor primero</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" id="btnExportarClientesCSV">&#8659; Exportar CSV</button>
+            <button class="btn btn-primary" id="btnNuevoCliente">+ Nuevo Cliente</button>
+          </div>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>DNI / RUC</th>
+                <th>Telefono</th>
+                <th>Email</th>
+                <th>Saldo Pendiente</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaClientes">
+              <tr><td colspan="6" class="empty-row">Sin clientes registrados</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- ══ PESTAÑA: FACTURACION ══════════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-facturacion" role="tabpanel">
+
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Facturacion</h2>
+            <p class="panel-sub">Cuotas mensuales y registro de pagos</p>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="filtroPresetCuotas" style="min-width:160px">
+              <option value="mes">Este Mes</option>
+              <option value="3m">&#218;ltimos 3 meses</option>
+              <option value="6m">&#218;ltimos 6 meses</option>
+              <option value="ano">&#218;ltimo A&#241;o</option>
+              <option value="custom">Rango Personalizado</option>
+            </select>
+            <div id="filtroRangoCuotas" style="display:none;align-items:center;gap:6px">
+              <label style="font-size:13px;color:var(--text-muted)">Desde</label>
+              <input type="date" id="filtroCustomDesdeCuotas" />
+              <label style="font-size:13px;color:var(--text-muted)">Hasta</label>
+              <input type="date" id="filtroCustomHastaCuotas" />
+            </div>
+            <select id="filtroTipoCuota" style="min-width:160px">
+              <option value="">Mensualidades e Ingresos</option>
+              <option value="mensualidad">Solo Mensualidades</option>
+              <option value="extra">Solo Ingresos Extra</option>
+            </select>
+            <select id="filtroClienteCuotas" style="min-width:160px">
+              <option value="">Todos los clientes</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-secondary" id="btnFiltrarCuotas">Aplicar</button>
+            <button class="btn btn-secondary" id="btnLimpiarFiltrosCuotas" title="Limpiar">&#10005;</button>
+            <button class="btn btn-secondary" id="btnExportarCSV">&#8659; Exportar CSV</button>
+            <button class="btn btn-secondary" id="btnGenerarMensualidades">&#9654; Generar Mensualidades</button>
+            <button class="btn btn-primary" id="btnIngresoExtra">+ Ingreso Extra</button>
+          </div>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Concepto</th>
+                <th>Periodo</th>
+                <th>Cliente</th>
+                <th>Monto</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaCuotas">
+              <tr><td colspan="6" class="empty-row">Sin cuotas registradas</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ PESTAÑA: REPORTES ═════════════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-reportes" role="tabpanel">
+
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Analisis Financiero</h2>
+            <p class="panel-sub">KPIs y proyecciones del negocio</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="filtroPresetDash" style="min-width:160px">
+              <option value="mes">Este Mes</option>
+              <option value="3m">&#218;ltimos 3 meses</option>
+              <option value="6m">&#218;ltimos 6 meses</option>
+              <option value="ano">&#218;ltimo A&#241;o</option>
+              <option value="custom">Rango Personalizado</option>
+            </select>
+            <div id="filtroRangoDash" style="display:none;align-items:center;gap:6px">
+              <label style="font-size:13px;color:var(--text-muted)">Desde</label>
+              <input type="date" id="filtroCustomDesdeDash" />
+              <label style="font-size:13px;color:var(--text-muted)">Hasta</label>
+              <input type="date" id="filtroCustomHastaDash" />
+              <button class="btn btn-secondary" id="btnAplicarFiltroDash">Aplicar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="stats-grid stats-grid-3">
+          <!-- Fila positiva -->
+          <div class="stat-card kpi-blue">
+            <div class="kpi-row"><span class="stat-label">Embarcaciones</span><span class="kpi-icon">&#9875;</span></div>
+            <div class="stat-value" id="statEmbarcaciones">0</div>
+            <div class="stat-sub">en sistema</div>
+          </div>
+          <div class="stat-card kpi-indigo">
+            <div class="kpi-row"><span class="stat-label">Clientes</span><span class="kpi-icon">&#128100;</span></div>
+            <div class="stat-value" id="statClientes">0</div>
+            <div class="stat-sub">registrados</div>
+          </div>
+          <div class="stat-card kpi-emerald">
+            <div class="kpi-row"><span class="stat-label">Recaudacion Real</span><span class="kpi-icon">&#128176;</span></div>
+            <div class="stat-value" id="statIngresos">$ 0,00</div>
+            <div class="stat-sub" id="subIngresos">mes actual</div>
+          </div>
+          <!-- Fila negativa -->
+          <div class="stat-card kpi-amber">
+            <div class="kpi-row"><span class="stat-label">Cuotas Impagas</span><span class="kpi-icon">&#9888;</span></div>
+            <div class="stat-value" id="statPendientes">0</div>
+            <div class="stat-sub" id="subPendientes">sin cobrar</div>
+          </div>
+          <div class="stat-card kpi-orange">
+            <div class="kpi-row"><span class="stat-label">Cuotas Parciales</span><span class="kpi-icon">&#9684;</span></div>
+            <div class="stat-value" id="statParciales">0</div>
+            <div class="stat-sub" id="subParciales">sin pagos parciales</div>
+          </div>
+          <div class="stat-card kpi-red">
+            <div class="kpi-row"><span class="stat-label">Morosidad</span><span class="kpi-icon">&#128200;</span></div>
+            <div class="stat-value" id="statMorosidad">0%</div>
+            <div class="stat-sub">impagas + parciales / total mes</div>
+          </div>
+        </div>
+
+        <!-- Proyeccion del Mes -->
+        <div class="proyeccion-card">
+          <div class="proyeccion-header">
+            <span class="proyeccion-title">&#127919; Proyeccion del Mes</span>
+            <span class="proyeccion-periodo" id="proyeccionPeriodo"></span>
+          </div>
+          <div class="proyeccion-body">
+            <div class="proyeccion-kpi">
+              <span class="proyeccion-label">Ingresos Proyectados</span>
+              <span class="proyeccion-value" id="statProyectado">$ 0,00</span>
+              <span class="proyeccion-sub">segun categorias activas</span>
+            </div>
+            <div class="proyeccion-sep"></div>
+            <div class="proyeccion-kpi">
+              <span class="proyeccion-label">Recaudacion Real</span>
+              <span class="proyeccion-value" id="statRecaudacionReal">$ 0,00</span>
+              <span class="proyeccion-sub">pagos efectivos del mes</span>
+            </div>
+            <div class="proyeccion-sep"></div>
+            <div class="proyeccion-eficacia">
+              <span class="proyeccion-label">Eficacia de Cobro</span>
+              <span class="proyeccion-pct" id="statEficacia">0%</span>
+              <div class="eficacia-bar-track">
+                <div class="eficacia-bar-fill" id="eficaciaFill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grafico de barras -->
+        <div class="card">
+          <h3>Ingresos por Mes (ultimos 6)</h3>
+          <div class="chart-wrap">
+            <canvas id="chartIngresosMes"></canvas>
+          </div>
+        </div>
+
+        <!-- Cuotas por cobrar -->
+        <div class="card">
+          <h3>Cuotas por Cobrar</h3>
+          <table class="table" id="dashboardCuotas">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Concepto</th>
+                <th>Periodo</th>
+                <th>Estado</th>
+                <th>Resta Cobrar</th>
+              </tr>
+            </thead>
+            <tbody id="dashboardCuotasBody">
+              <tr><td colspan="5" class="empty-row">Sin cuotas pendientes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ PESTAÑA: CONFIGURACION ════════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-configuracion" role="tabpanel">
+
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Configuracion</h2>
+            <p class="panel-sub">Identidad de la guarderia y categorias de embarcacion</p>
+          </div>
+        </div>
+
+        <!-- Identidad -->
+        <div class="config-section-header">
+          <h3 class="config-section-title">Identidad de la Guarderia</h3>
+        </div>
+        <div class="config-card">
+          <form id="formConfiguracion">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Nombre de la Guarderia</label>
+                <input type="text" id="configNombreGuarderia" placeholder="Ej: Marina del Sur" />
+              </div>
+              <div class="form-group">
+                <label>Correo electronico</label>
+                <input type="email" id="configEmail" readonly />
+              </div>
+            </div>
+
+            <div class="config-divider"></div>
+
+            <div class="config-password-warning">
+              &#9888; Cambiar la contrasena cerrara tu sesion en todos los dispositivos.
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Nueva Contrasena</label>
+                <div class="password-field">
+                  <input type="password" id="configPassword" placeholder="Dejar vacio para no cambiar" autocomplete="new-password" />
+                  <button type="button" class="btn-eye" id="btnEyePassword" title="Mostrar/ocultar">&#128065;</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Confirmar Contrasena</label>
+                <div class="password-field">
+                  <input type="password" id="configPasswordConfirm" placeholder="Repetir contrasena" autocomplete="new-password" />
+                  <button type="button" class="btn-eye" id="btnEyePasswordConfirm" title="Mostrar/ocultar">&#128065;</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+              <button type="submit" class="btn btn-primary" id="btnGuardarConfig">Guardar Cambios</button>
+              <span class="config-success" id="configSuccess" hidden>&#10003; Guardado correctamente</span>
+            </div>
+            <p class="login-error" id="configError" hidden></p>
+          </form>
+        </div>
+
+        <!-- Metodos de Pago -->
+        <div class="config-section-header" style="margin-top:36px">
+          <h3 class="config-section-title">Metodos de Pago</h3>
+        </div>
+        <div class="section-toolbar">
+          <span style="font-size:13px;color:var(--text-muted)">Metodos disponibles al registrar pagos y cuotas</span>
+          <button class="btn btn-primary" id="btnNuevoMetodoPago">+ Nuevo Metodo</button>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaMetodosPago">
+              <tr><td colspan="2" class="empty-row">Sin metodos registrados</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ PESTAÑA: CATEGORIAS ═══════════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-categorias" role="tabpanel">
+
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Categorias</h2>
+            <p class="panel-sub">Tipos de embarcacion y precios base mensuales</p>
+          </div>
+        </div>
+        <div class="section-toolbar">
+          <input type="text" class="search-input" id="searchCategorias" placeholder="Buscar categoria..." />
+          <button class="btn btn-primary" id="btnNuevaCategoria">+ Nueva Categoria</button>
+        </div>
+        <div class="card">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Precio Mensual</th>
+                <th>Creado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaCategorias">
+              <tr><td colspan="4" class="empty-row">Sin categorias registradas</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /.tab-content -->
+  </div><!-- /.app-shell -->
+
+  <!-- ═══ MODALES ═══════════════════════════════════════════════════════════ -->
+
+  <!-- MODAL EMBARCACION -->
+  <div class="modal-overlay" id="modalEmbarcacion">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalEmbarcacionTitle">Nueva Embarcacion</h3>
+        <button class="modal-close" data-modal="modalEmbarcacion">&times;</button>
+      </div>
+      <form id="formEmbarcacion" class="modal-body">
+        <input type="hidden" id="embarcacionId" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="embNombre" required placeholder="Nombre de la embarcacion" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Matricula</label>
+            <input type="text" id="embMatricula" required placeholder="ABC-1234" />
+          </div>
+          <div class="form-group">
+            <label>Categoria</label>
+            <select id="embCategoria" data-placeholder="-- Seleccionar categoria --">
+              <option value="">-- Seleccionar categoria --</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Eslora (m)</label>
+            <input type="number" id="embEslora" placeholder="12.5" step="0.1" />
+          </div>
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="embEstado">
+              <option>En Puerto</option>
+              <option>En Mar</option>
+              <option>En Mantenimiento</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Propietario</label>
+          <select id="embPropietario" data-placeholder="-- Seleccionar cliente --">
+            <option value="">-- Seleccionar cliente --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea id="embNotas" rows="2" placeholder="Observaciones..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal="modalEmbarcacion">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CLIENTE -->
+  <div class="modal-overlay" id="modalCliente">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalClienteTitle">Nuevo Cliente</h3>
+        <button class="modal-close" data-modal="modalCliente">&times;</button>
+      </div>
+      <form id="formCliente" class="modal-body">
+        <input type="hidden" id="clienteId" />
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nombre completo</label>
+            <input type="text" id="cliNombre" required placeholder="Juan Perez" />
+          </div>
+          <div class="form-group">
+            <label>DNI / RUC</label>
+            <input type="text" id="cliDni" required placeholder="12345678" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Telefono</label>
+            <input type="tel" id="cliTelefono" placeholder="+51 999 999 999" />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="cliEmail" placeholder="correo@ejemplo.com" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Direccion</label>
+          <input type="text" id="cliDireccion" placeholder="Calle, ciudad" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal="modalCliente">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CATEGORIA -->
+  <div class="modal-overlay" id="modalCategoria">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="modalCategoriaTitle">Nueva Categoria</h3>
+        <button class="modal-close" data-modal="modalCategoria">&times;</button>
+      </div>
+      <form id="formCategoria" class="modal-body">
+        <input type="hidden" id="categoriaId" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="catNombre" required placeholder="Ej: Lancha, Crucero, Moto de agua" />
+        </div>
+        <div class="form-group">
+          <label>Precio Base Mensual</label>
+          <input type="number" id="catPrecio" required placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal="modalCategoria">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL GENERAR MENSUALIDADES -->
+  <div class="modal-overlay" id="modalMensualidades">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Generar Mensualidades</h3>
+        <button class="modal-close" data-modal="modalMensualidades">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted);font-size:13px">
+          Se creara una cuota para cada embarcacion con categoria y propietario asignados.
+        </p>
+        <div class="form-group" style="margin-top:14px">
+          <label>Periodo (mes y año)</label>
+          <input type="month" id="mensualidadPeriodo" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalMensualidades">Cancelar</button>
+        <button class="btn btn-primary" id="btnConfirmarMensualidades">Generar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RECUPERAR CONTRASEÑA -->
+  <div class="modal-overlay" id="modalResetPassword">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Recuperar Contrasena</h3>
+        <button class="modal-close" data-modal="modalResetPassword">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">
+          Ingresa tu correo y te enviaremos un enlace para restablecer tu contrasena.
+        </p>
+        <div class="form-group">
+          <label>Correo electronico</label>
+          <input type="email" id="resetEmail" placeholder="usuario@guarderia.com" />
+        </div>
+        <p class="login-error" id="resetMsg" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalResetPassword">Cancelar</button>
+        <button class="btn btn-primary" id="btnEnviarReset">Enviar enlace</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CUENTA CORRIENTE -->
+  <div class="modal-overlay" id="modalCuentaCorriente">
+    <div class="modal modal-cc">
+      <div class="modal-header no-print">
+        <h3 id="ccClienteNombre">Cuenta Corriente</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-secondary" id="btnImprimirCC" style="font-size:12px;padding:6px 12px">&#128438; Imprimir / PDF</button>
+          <button class="modal-close" data-modal="modalCuentaCorriente">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body print-area" id="ccPrintArea">
+        <div class="cc-print-header">
+          <strong id="ccPrintNombre"></strong>
+          <span id="ccPrintFecha"></span>
+        </div>
+        <div class="cc-summary">
+          <div class="cc-kpi cc-kpi-debe">
+            <span class="cc-kpi-label">Total Cargos</span>
+            <span class="cc-kpi-val" id="ccTotalDebe">$ 0,00</span>
+          </div>
+          <div class="cc-kpi cc-kpi-haber">
+            <span class="cc-kpi-label">Total Pagado</span>
+            <span class="cc-kpi-val" id="ccTotalHaber">$ 0,00</span>
+          </div>
+          <div class="cc-kpi cc-kpi-saldo">
+            <span class="cc-kpi-label">Saldo Pendiente</span>
+            <span class="cc-kpi-val" id="ccSaldoFinal">$ 0,00</span>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Concepto</th>
+                <th style="text-align:right">Debe</th>
+                <th style="text-align:right">Haber</th>
+                <th style="text-align:right">Saldo</th>
+              </tr>
+            </thead>
+            <tbody id="tablaCuentaCorriente">
+              <tr><td colspan="5" class="empty-row">Sin movimientos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer no-print">
+        <button class="btn btn-secondary" data-modal="modalCuentaCorriente">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR CUOTA -->
+  <div class="modal-overlay" id="modalEditarCuota">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Editar Cuota</h3>
+        <button class="modal-close" data-modal="modalEditarCuota">&times;</button>
+      </div>
+      <form id="formEditarCuota" class="modal-body">
+        <input type="hidden" id="editCuotaId" />
+        <div class="form-group">
+          <label>Concepto</label>
+          <input type="text" id="editCuotaConcepto" required placeholder="Descripcion de la cuota" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Monto</label>
+            <input type="number" id="editCuotaMonto" required step="0.01" min="0" placeholder="0.00" />
+          </div>
+          <div class="form-group">
+            <label>Periodo</label>
+            <input type="month" id="editCuotaPeriodo" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Estado <small style="color:var(--text-muted);font-weight:400">(calculado automáticamente)</small></label>
+          <select id="editCuotaEstado" disabled style="opacity:0.7;cursor:not-allowed">
+            <option value="pendiente">Pendiente</option>
+            <option value="parcial">Parcial</option>
+            <option value="pagado">Pagado</option>
+            <option value="vencido">Vencido</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal="modalEditarCuota">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL REGISTRAR PAGO -->
+  <div class="modal-overlay" id="modalRegistrarPago">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Registrar Pago</h3>
+        <button class="modal-close" data-modal="modalRegistrarPago">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="pagoModalCuotaId" />
+        <div class="pago-info-box">
+          <div class="pago-info-row">
+            <span class="pago-info-label">Concepto</span>
+            <span class="pago-info-val" id="pagoInfoConcepto">&#8212;</span>
+          </div>
+          <div class="pago-info-row">
+            <span class="pago-info-label">Monto original</span>
+            <span class="pago-info-val pago-info-monto" id="pagoInfoMonto">$ 0,00</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Monto a Pagar</label>
+          <input type="number" id="pagoMontoPagar" step="0.01" min="0.01" placeholder="0.00" required />
+        </div>
+        <div class="form-group">
+          <label>Metodo de Pago</label>
+          <select id="pagoMetodo">
+            <option value="Efectivo">Efectivo</option>
+            <option value="Transferencia">Transferencia Bancaria</option>
+            <option value="Cheque">Cheque</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <p class="login-error" id="pagoUploadError" hidden></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalRegistrarPago">Cancelar</button>
+        <button class="btn btn-primary" id="btnConfirmarPago">&#10003; Confirmar Pago</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL VER DETALLE CLIENTE -->
+  <div class="modal-overlay" id="modalDetalleCliente">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalDetalleClienteTitle">Detalle del Cliente</h3>
+        <button class="modal-close" data-modal="modalDetalleCliente">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:10px 14px;background:var(--bg);border-radius:6px">
+          <span style="font-size:13px;color:var(--text-muted)">Saldo pendiente total</span>
+          <strong id="detalleSaldoPendiente" style="font-size:18px">$ 0,00</strong>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Concepto</th>
+              <th>Periodo</th>
+              <th>Monto</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tablaDetalleCliente">
+            <tr><td colspan="4" class="empty-row">Sin cuotas registradas</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalDetalleCliente">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIRMACION -->
+  <div class="modal-overlay" id="modalConfirm">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Confirmar eliminacion</h3>
+        <button class="modal-close" data-modal="modalConfirm">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage">&#191;Estas seguro de que deseas eliminar este registro?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalConfirm">Cancelar</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL INGRESO EXTRA -->
+  <div class="modal-overlay" id="modalIngresoExtra">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>Registrar Ingreso Extra</h3>
+        <button class="modal-close" data-modal="modalIngresoExtra">&times;</button>
+      </div>
+      <form id="formIngresoExtra" class="modal-body">
+        <div class="form-group">
+          <label>Concepto <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="ingresoExtraConcepto" required placeholder="Ej: Venta Repuestos, Servicio extra..." />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Monto <span style="color:var(--danger)">*</span></label>
+            <input type="number" id="ingresoExtraMonto" required min="0.01" step="0.01" placeholder="0,00" />
+          </div>
+          <div class="form-group">
+            <label>Metodo de Pago</label>
+            <select id="ingresoExtraMetodo"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Cliente <span style="font-size:12px;color:var(--text-muted)">(opcional)</span></label>
+          <select id="ingresoExtraCliente">
+            <option value="">&#8212; Sin cliente especifico &#8212;</option>
+          </select>
+        </div>
+        <p class="login-error" id="ingresoExtraError" hidden></p>
+        <div class="modal-footer" style="padding:0;border:0;margin-top:16px">
+          <button type="button" class="btn btn-secondary" data-modal="modalIngresoExtra">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnGuardarIngresoExtra">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL METODO DE PAGO -->
+  <div class="modal-overlay" id="modalMetodoPago">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="modalMetodoPagoTitle">Nuevo Metodo de Pago</h3>
+        <button class="modal-close" data-modal="modalMetodoPago">&times;</button>
+      </div>
+      <form id="formMetodoPago" class="modal-body">
+        <input type="hidden" id="metodoPagoId" />
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="metodoPagoNombre" required placeholder="Ej: Efectivo, Transferencia..." />
+        </div>
+        <div class="modal-footer" style="padding:0;border:0;margin-top:16px">
+          <button type="button" class="btn btn-secondary" data-modal="modalMetodoPago">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnGuardarMetodoPago">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══ SCRIPTS ═══════════════════════════════════════════════════════════ -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/services.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
