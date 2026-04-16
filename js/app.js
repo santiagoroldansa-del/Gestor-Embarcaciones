@@ -14,7 +14,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 /**
  * Cambia la pestaña activa y carga los datos correspondientes.
- * @param {string} tabId  'inicio' | 'clientes' | 'reportes' | 'configuracion'
+ * @param {string} tabId  'inicio' | 'facturacion' | 'reportes'
  */
 async function switchTab(tabId) {
   // Actualizar botones
@@ -29,12 +29,9 @@ async function switchTab(tabId) {
   if (panel) panel.classList.add('active');
 
   // Cargar datos según pestaña
-  if (tabId === 'inicio')        await Promise.all([renderEmbarcaciones(), renderUltimosMovimientos()]);
-  if (tabId === 'clientes')      await renderClientes();
-  if (tabId === 'facturacion')   await renderCuotas();
-  if (tabId === 'reportes')      await renderDashboard();
-  if (tabId === 'categorias')    await renderCategorias();
-  if (tabId === 'configuracion') { await renderConfiguracion(); await renderMetodosPago(); }
+  if (tabId === 'inicio')      await Promise.all([renderEmbarcaciones(), renderClientes(), renderCategorias(), renderMetodosPago()]);
+  if (tabId === 'facturacion') await Promise.all([renderCuotas(), renderUltimosMovimientos()]);
+  if (tabId === 'reportes')    await renderDashboard();
 }
 
 // ─── MODALES ──────────────────────────────────────────────────────────────────
@@ -193,6 +190,28 @@ function fillSelect(selectId, items, labelFn, selectedId = '') {
   });
 }
 
+// ─── PAGINACIÓN ───────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 5;
+const _pag = { emb: 0, cli: 0 };
+
+function _updatePaginControls(key, total) {
+  const suffix = key === 'emb' ? 'Embarcaciones' : 'Clientes';
+  const page   = _pag[key];
+  const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+  const prevEl = document.getElementById(`prev${suffix}`);
+  const nextEl = document.getElementById(`next${suffix}`);
+  const infoEl = document.getElementById(`info${suffix}`);
+  const pagEl  = document.getElementById(`pagin${suffix}`);
+  if (!prevEl) return;
+  prevEl.disabled = page === 0;
+  nextEl.disabled = page >= totalPages - 1;
+  if (infoEl) infoEl.textContent = total > PAGE_SIZE
+    ? `Pág. ${page + 1} / ${totalPages}  (${total} total)`
+    : '';
+  if (pagEl) pagEl.style.display = total <= PAGE_SIZE ? 'none' : 'flex';
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 // Usuario autenticado activo (se rellena en showApp)
@@ -203,7 +222,7 @@ let _chartIngresos = null;
 
 // ─── FILTRO DE FECHA COMPARTIDO (Facturación + Reportes) ─────────────────────
 
-const _filtroFecha = { preset: 'mes', desde: '', hasta: '' };
+const _filtroFecha = { preset: 'todo', desde: '', hasta: '' };
 
 /**
  * Devuelve el rango activo como { tipo, desde, hasta }.
@@ -213,6 +232,9 @@ const _filtroFecha = { preset: 'mes', desde: '', hasta: '' };
 function _getRangoActivo() {
   const hoy = new Date();
   const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+  if (_filtroFecha.preset === 'todo') {
+    return { tipo: 'todo' };
+  }
   if (_filtroFecha.preset === 'mes') {
     return { tipo: 'periodo', desde: mesActual, hasta: mesActual };
   }
@@ -241,6 +263,7 @@ function _getRangoActivo() {
 /** True si la cuota cae dentro del rango activo. */
 function _cuotaMatchesFiltro(cuota) {
   const r = _getRangoActivo();
+  if (r.tipo === 'todo') return true;
   if (r.tipo === 'periodo') {
     if (r.desde && cuota.periodo < r.desde) return false;
     if (r.hasta && cuota.periodo > r.hasta) return false;
@@ -272,7 +295,7 @@ function _syncFiltroUI() {
 /** Devuelve una etiqueta legible del rango activo para los KPIs. */
 function _etiquetaRango() {
   const r = _getRangoActivo();
-  const labels = { mes: 'Este mes', '3m': 'Últ. 3 meses', '6m': 'Últ. 6 meses', ano: 'Último año' };
+  const labels = { todo: 'Todos los registros', mes: 'Este mes', '3m': 'Últ. 3 meses', '6m': 'Últ. 6 meses', ano: 'Último año' };
   if (_filtroFecha.preset !== 'custom') return labels[_filtroFecha.preset] || r.desde;
   const d = r.desde || '…', h = r.hasta || '…';
   return `${d} → ${h}`;
@@ -281,6 +304,9 @@ function _etiquetaRango() {
 /** Convierte el rango activo a timestamps ISO para consultar la tabla 'pagos'. */
 function _rangoToISO() {
   const r = _getRangoActivo();
+  if (r.tipo === 'todo') {
+    return { desdeISO: '2000-01-01T00:00:00', hastaISO: '2099-12-31T23:59:59' };
+  }
   if (r.tipo === 'periodo') {
     const desdeISO = `${r.desde}-01T00:00:00`;
     const [hy, hm] = r.hasta.split('-').map(Number);
@@ -356,6 +382,57 @@ async function renderDashboard() {
 
     if (document.getElementById('subIngresos')) {
       document.getElementById('subIngresos').textContent = etiqueta;
+    }
+
+    // ── Tooltip morosidad ─────────────────────────────────────
+    const cliMapDash = new Map(clis.map(c => [String(c.id), c]));
+    const tooltipEl  = document.getElementById('tooltipMorosidad');
+    if (tooltipEl) {
+      const todasDeudas = [
+        ...cuotasImpagas.map(c  => ({ ...c, _tt: 'impaga' })),
+        ...cuotasParciales.map(c => ({ ...c, _tt: 'parcial' })),
+      ];
+
+      if (todasDeudas.length === 0) {
+        tooltipEl.dataset.empty = 'true';
+        tooltipEl.innerHTML = '';
+      } else {
+        tooltipEl.dataset.empty = 'false';
+        const MAX_VISIBLE = 5;
+        const visibles    = todasDeudas.slice(0, MAX_VISIBLE);
+        const extras      = todasDeudas.length - MAX_VISIBLE;
+
+        const filas = visibles.map(c => {
+          const cli    = cliMapDash.get(String(c.cliente_id));
+          const nombre = escHTML(cli?.nombre ?? '—');
+          const monto  = `$ ${formatMonto(c.monto)}`;
+          const cls    = c._tt === 'impaga' ? 'tt-badge-impaga' : 'tt-badge-parcial';
+          const label  = c._tt === 'impaga' ? 'Impaga' : 'Parcial';
+          const periodo = escHTML(c.periodo ?? c.concepto ?? '—');
+          return `<tr>
+            <td>${nombre}</td>
+            <td>${periodo}</td>
+            <td>${monto}</td>
+            <td class="${cls}">${label}</td>
+          </tr>`;
+        }).join('');
+
+        const masHTML = extras > 0
+          ? `<div class="kpi-tooltip-more">... y ${extras} deuda${extras > 1 ? 's' : ''} más</div>`
+          : '';
+
+        tooltipEl.innerHTML = `
+          <p class="kpi-tooltip-title">Detalle de deudas (${todasDeudas.length})</p>
+          <div class="kpi-tooltip-scroll">
+            <table>
+              <thead><tr>
+                <th>Cliente</th><th>Periodo</th><th>Monto</th><th>Estado</th>
+              </tr></thead>
+              <tbody>${filas}</tbody>
+            </table>
+          </div>
+          ${masHTML}`;
+      }
     }
 
     // ── Proyección del mes ────────────────────────────────────
@@ -440,34 +517,77 @@ async function renderDashboard() {
 
 // ─── LISTENERS: FILTRO COMPARTIDO ────────────────────────────────────────────
 
-// Preset dropdowns (aplican inmediatamente para opciones fijas)
+// ── Helpers de estado para botones de filtro toggle ──────────
+function _filterBtnActivate(btn) {
+  btn.classList.add('is-active');
+  btn.innerHTML = 'Aplicar <em class="btn-filter-x">×</em>';
+}
+function _filterBtnReset(btn) {
+  btn.classList.remove('is-active');
+  btn.textContent = 'Aplicar';
+}
+
+// Preset dropdowns — solo muestran/ocultan el rango custom, NO aplican
 ['filtroPresetCuotas', 'filtroPresetDash'].forEach(id => {
-  document.getElementById(id)?.addEventListener('change', async e => {
-    _filtroFecha.preset = e.target.value;
-    if (_filtroFecha.preset !== 'custom') {
-      _filtroFecha.desde = '';
-      _filtroFecha.hasta = '';
-      _syncFiltroUI();
-      await Promise.all([renderCuotas(), renderDashboard()]);
-    } else {
-      _syncFiltroUI(); // solo muestra los inputs; espera "Aplicar"
-    }
+  document.getElementById(id)?.addEventListener('change', e => {
+    const tag   = id.includes('Cuotas') ? 'Cuotas' : 'Dash';
+    const rango = document.getElementById(`filtroRango${tag}`);
+    if (rango) rango.style.display = e.target.value === 'custom' ? 'flex' : 'none';
   });
 });
 
-// Botones "Aplicar" para rango personalizado
+// Botón Aplicar — Facturación (toggle)
 document.getElementById('btnFiltrarCuotas')?.addEventListener('click', async () => {
-  if (_filtroFecha.preset === 'custom') {
-    _filtroFecha.desde = document.getElementById('filtroCustomDesdeCuotas').value;
-    _filtroFecha.hasta = document.getElementById('filtroCustomHastaCuotas').value;
+  const btn = document.getElementById('btnFiltrarCuotas');
+  if (btn.classList.contains('is-active')) {
+    // Resetear todos los filtros
+    _filtroFecha.preset = 'todo';
+    _filtroFecha.desde  = '';
+    _filtroFecha.hasta  = '';
+    document.getElementById('filtroPresetCuotas').value  = 'todo';
+    document.getElementById('filtroTipoCuota').value     = '';
+    document.getElementById('filtroClienteCuotas').value = '';
+    document.getElementById('filtroRangoCuotas').style.display = 'none';
+    _filterBtnReset(btn);
+  } else {
+    // Leer el preset actual del select en el momento del click
+    _filtroFecha.preset = document.getElementById('filtroPresetCuotas').value;
+    if (_filtroFecha.preset === 'custom') {
+      _filtroFecha.desde = document.getElementById('filtroCustomDesdeCuotas').value;
+      _filtroFecha.hasta = document.getElementById('filtroCustomHastaCuotas').value;
+    } else {
+      _filtroFecha.desde = '';
+      _filtroFecha.hasta = '';
+    }
+    _filterBtnActivate(btn);
   }
   _syncFiltroUI();
   await Promise.all([renderCuotas(), renderDashboard()]);
 });
 
+// Botón Aplicar — Reportes (toggle)
 document.getElementById('btnAplicarFiltroDash')?.addEventListener('click', async () => {
-  _filtroFecha.desde = document.getElementById('filtroCustomDesdeDash').value;
-  _filtroFecha.hasta = document.getElementById('filtroCustomHastaDash').value;
+  const btn = document.getElementById('btnAplicarFiltroDash');
+  if (btn.classList.contains('is-active')) {
+    // Resetear a todo
+    _filtroFecha.preset = 'todo';
+    _filtroFecha.desde  = '';
+    _filtroFecha.hasta  = '';
+    document.getElementById('filtroPresetDash').value = 'todo';
+    document.getElementById('filtroRangoDash').style.display = 'none';
+    _filterBtnReset(btn);
+  } else {
+    // Leer preset actual del select
+    _filtroFecha.preset = document.getElementById('filtroPresetDash').value;
+    if (_filtroFecha.preset === 'custom') {
+      _filtroFecha.desde = document.getElementById('filtroCustomDesdeDash').value;
+      _filtroFecha.hasta = document.getElementById('filtroCustomHastaDash').value;
+    } else {
+      _filtroFecha.desde = '';
+      _filtroFecha.hasta = '';
+    }
+    _filterBtnActivate(btn);
+  }
   _syncFiltroUI();
   await Promise.all([renderCuotas(), renderDashboard()]);
 });
@@ -497,11 +617,13 @@ async function renderEmbarcaciones(filter = '') {
       });
     }
 
+    _updatePaginControls('emb', list.length);
     if (list.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin embarcaciones registradas</td></tr>';
       return;
     }
-    tbody.innerHTML = list.map(e => {
+    const _embStart = _pag.emb * PAGE_SIZE;
+    tbody.innerHTML = list.slice(_embStart, _embStart + PAGE_SIZE).map(e => {
       const propId  = e.propietario_id ?? e.propietarioId;
       const cliente = propId ? clienteMap.get(String(propId)) : null;
       const cat     = e.categoria_id ? categoriaMap.get(String(e.categoria_id)) : null;
@@ -509,7 +631,6 @@ async function renderEmbarcaciones(filter = '') {
         <td><strong>${escHTML(e.nombre)}</strong></td>
         <td><code>${escHTML(e.matricula)}</code></td>
         <td>${escHTML(cat ? cat.nombre : '—')}</td>
-        <td>${estadoBadge(e.estado)}</td>
         <td>${escHTML(cliente ? cliente.nombre : '—')}</td>
         <td>
           <button class="btn-icon" onclick="editEmbarcacion('${escHTML(String(e.id))}')" title="Editar">&#9998;</button>
@@ -525,7 +646,16 @@ async function renderEmbarcaciones(filter = '') {
 }
 
 document.getElementById('searchEmbarcaciones').addEventListener('input', e => {
+  _pag.emb = 0;
   renderEmbarcaciones(e.target.value);
+});
+
+document.getElementById('prevEmbarcaciones').addEventListener('click', () => {
+  if (_pag.emb > 0) { _pag.emb--; renderEmbarcaciones(document.getElementById('searchEmbarcaciones').value); }
+});
+document.getElementById('nextEmbarcaciones').addEventListener('click', () => {
+  _pag.emb++;
+  renderEmbarcaciones(document.getElementById('searchEmbarcaciones').value);
 });
 
 document.getElementById('btnNuevaEmbarcacion').addEventListener('click', async () => {
@@ -558,7 +688,6 @@ async function editEmbarcacion(id) {
     document.getElementById('embNombre').value     = emb.nombre    || '';
     document.getElementById('embMatricula').value  = emb.matricula || '';
     document.getElementById('embEslora').value     = emb.eslora    || '';
-    document.getElementById('embEstado').value     = emb.estado    || 'En Puerto';
     document.getElementById('embNotas').value      = emb.notas     || '';
 
     const propId = emb.propietario_id ?? emb.propietarioId ?? '';
@@ -598,7 +727,6 @@ document.getElementById('formEmbarcacion').addEventListener('submit', async e =>
       matricula:     document.getElementById('embMatricula').value.trim(),
       categoria_id:  document.getElementById('embCategoria').value || null,
       eslora:        document.getElementById('embEslora').value,
-      estado:        document.getElementById('embEstado').value,
       propietario_id: document.getElementById('embPropietario').value || null,
       notas:         document.getElementById('embNotas').value.trim(),
     };
@@ -620,28 +748,27 @@ async function renderUltimosMovimientos() {
   if (!tbody) return;
   setTableLoading(tbody, 5);
   try {
-    const [pagos, clientes] = await Promise.all([
-      PagosService.getRecientes(12),
+    const [extras, clientes] = await Promise.all([
+      PagosService.getExtras(),         // solo cuota_id: null
       ClientesService.getAll(),
     ]);
     const cliMap = new Map(clientes.map(c => [String(c.id), c]));
 
-    if (pagos.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Sin movimientos recientes</td></tr>';
+    // Orden: más reciente primero
+    extras.sort((a, b) => (a.fecha_pago > b.fecha_pago ? -1 : 1));
+
+    if (extras.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Sin ingresos registrados</td></tr>';
       return;
     }
-    tbody.innerHTML = pagos.map(p => {
-      const cli       = cliMap.get(String(p.cliente_id));
-      const esExtra   = !p.cuota_id;
-      const tipoBadge = esExtra
-        ? `<span class="badge badge-violet">EXTRA</span>`
-        : `<span class="badge badge-blue">Mensualidad</span>`;
-      const concepto  = escHTML(p.concepto || '—');
-      const fecha     = p.fecha_pago ? p.fecha_pago.slice(0, 10) : '—';
+    tbody.innerHTML = extras.map(p => {
+      const cli    = cliMap.get(String(p.cliente_id));
+      const fecha  = p.fecha_pago ? p.fecha_pago.slice(0, 10) : '—';
+      const metodo = escHTML(p.metodo_pago || p.metodoPago || '—');
       return `<tr>
-        <td>${tipoBadge}</td>
-        <td>${concepto}</td>
+        <td>${escHTML(p.concepto || '—')}</td>
         <td>${escHTML(cli ? cli.nombre : '—')}</td>
+        <td>${metodo}</td>
         <td>$ ${formatMonto(Number(p.monto))}</td>
         <td>${fecha}</td>
       </tr>`;
@@ -698,6 +825,7 @@ async function renderClientes() {
       list.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || '', 'es'));
     }
 
+    _updatePaginControls('cli', list.length);
     if (list.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin clientes para los filtros seleccionados</td></tr>';
       return;
@@ -705,7 +833,8 @@ async function renderClientes() {
 
     // Transición suave: fade out → actualizar → fade in
     tbody.style.opacity = '0';
-    tbody.innerHTML = list.map(c => {
+    const _cliStart = _pag.cli * PAGE_SIZE;
+    tbody.innerHTML = list.slice(_cliStart, _cliStart + PAGE_SIZE).map(c => {
       const saldo      = saldoMap.get(String(c.id)) || 0;
       const saldoClass = saldo > 0 ? 'badge-red' : 'badge-green';
       return `<tr>
@@ -730,9 +859,17 @@ async function renderClientes() {
   }
 }
 
-document.getElementById('sortClienteNombre').addEventListener('change', renderClientes);
-document.getElementById('filtroEstadoCliente').addEventListener('change', renderClientes);
-document.getElementById('sortClienteDeuda').addEventListener('change', renderClientes);
+document.getElementById('sortClienteNombre').addEventListener('change', () => { _pag.cli = 0; renderClientes(); });
+document.getElementById('filtroEstadoCliente').addEventListener('change', () => { _pag.cli = 0; renderClientes(); });
+document.getElementById('sortClienteDeuda').addEventListener('change', () => { _pag.cli = 0; renderClientes(); });
+
+document.getElementById('prevClientes').addEventListener('click', () => {
+  if (_pag.cli > 0) { _pag.cli--; renderClientes(); }
+});
+document.getElementById('nextClientes').addEventListener('click', () => {
+  _pag.cli++;
+  renderClientes();
+});
 
 document.getElementById('btnNuevoCliente').addEventListener('click', () => {
   document.getElementById('formCliente').reset();
@@ -1092,14 +1229,28 @@ document.getElementById('formMetodoPago').addEventListener('submit', async e => 
 
 async function renderCuotas() {
   const tbody = document.getElementById('tablaCuotas');
-  setTableLoading(tbody, 6);
+  setTableLoading(tbody, 7);
   try {
-    const [cuotas, extras, clientes] = await Promise.all([
+    const [cuotas, extras, clientes, embarcaciones] = await Promise.all([
       CuotasService.getAll(),
       PagosService.getExtras(),
       ClientesService.getAll(),
+      EmbarcacionesService.getAll(),
     ]);
-    const clienteMap = new Map(clientes.map(c => [String(c.id), c]));
+    const clienteMap     = new Map(clientes.map(c => [String(c.id), c]));
+    const embarcacionMap = new Map(embarcaciones.map(e => [String(e.id), e]));
+
+    // Categorias para mostrar en columna Embarcacion
+    const categorias    = await CategoriasService.getAll();
+    const categoriaMap  = new Map(categorias.map(c => [String(c.id), c]));
+
+    // Helper: "YYYY-MM" → "Ene 2025"
+    const _MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    function _periodoLabel(p) {
+      if (!p) return '—';
+      const [y, m] = p.split('-');
+      return `${_MESES[parseInt(m, 10) - 1] || m} ${y}`;
+    }
 
     // Poblar select de clientes si aún no está lleno
     const selectCliente = document.getElementById('filtroClienteCuotas');
@@ -1140,18 +1291,24 @@ async function renderCuotas() {
     });
 
     if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin registros para los filtros seleccionados</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-row">Sin registros para los filtros seleccionados</td></tr>';
       return;
     }
     tbody.innerHTML = list.map(item => {
-      const cliente = clienteMap.get(String(item.cliente_id));
-      const cid     = escHTML(String(item.id));
+      const cliente     = clienteMap.get(String(item.cliente_id));
+      const embarcacion = item.embarcacion_id ? embarcacionMap.get(String(item.embarcacion_id)) : null;
+      const categoria   = embarcacion?.categoria_id ? categoriaMap.get(String(embarcacion.categoria_id)) : null;
+      const embCell     = embarcacion
+        ? escHTML(embarcacion.nombre) + (categoria ? ` <span style="color:var(--text-muted);font-size:12px">(${escHTML(categoria.nombre)})</span>` : '')
+        : '—';
+      const cid         = escHTML(String(item.id));
 
       if (item._tipo === 'extra') {
         // ── Fila de Ingreso Extra ──────────────────────────────────────────────
         const fechaLabel = item.fecha_pago ? item.fecha_pago.slice(0, 10) : item.periodo;
         return `<tr>
           <td>${escHTML(item.concepto || '—')} <span class="badge badge-violet">EXTRA</span></td>
+          <td>—</td>
           <td>${escHTML(fechaLabel)}</td>
           <td>${escHTML(cliente ? cliente.nombre : '—')}</td>
           <td>$ ${formatMonto(Number(item.monto))}</td>
@@ -1189,7 +1346,8 @@ async function renderCuotas() {
         btnPrincipal = '';
       }
       return `<tr>
-        <td>${escHTML(item.concepto)}</td>
+        <td>Mensualidad ${escHTML(_periodoLabel(item.periodo))}</td>
+        <td>${embCell}</td>
         <td>${escHTML(item.periodo)}</td>
         <td>${escHTML(cliente ? cliente.nombre : '—')}</td>
         <td>${montoCell}</td>
@@ -1205,7 +1363,7 @@ async function renderCuotas() {
     }).join('');
   } catch (err) {
     console.error('renderCuotas:', err);
-    setTableError(tbody, 6);
+    setTableError(tbody, 7);
     showError('No se pudieron cargar las cuotas: ' + err.message);
   }
 }
@@ -1279,18 +1437,6 @@ document.getElementById('btnConfirmarPago').addEventListener('click', async () =
   }
 });
 
-document.getElementById('btnLimpiarFiltrosCuotas').addEventListener('click', async () => {
-  _filtroFecha.preset = 'mes';
-  _filtroFecha.desde  = '';
-  _filtroFecha.hasta  = '';
-  document.getElementById('filtroClienteCuotas').value = '';
-  document.getElementById('filtroTipoCuota').value = '';
-  _syncFiltroUI();
-  await Promise.all([renderCuotas(), renderDashboard()]);
-});
-
-// Filtro de tipo aplica inmediatamente al cambiar
-document.getElementById('filtroTipoCuota').addEventListener('change', renderCuotas);
 
 // ── ELIMINAR INGRESO EXTRA ────────────────────────────────────────────────────
 
@@ -1468,6 +1614,7 @@ function exportarCSV(cuotas, clientes) {
 
   // Nombre de archivo dinámico según el preset activo
   const sufijosNombre = {
+    todo:   'todos',
     mes:    'este_mes',
     '3m':   '3_meses',
     '6m':   '6_meses',
@@ -1523,7 +1670,7 @@ function exportarEmbarcacionesCSV(embarcaciones, clientes, categorias) {
     const cat    = e.categoria_id ? catMap.get(String(e.categoria_id)) : null;
     return [
       e.nombre ?? '', e.matricula ?? '', cat?.nombre ?? '',
-      e.estado ?? '', cli?.nombre ?? '', e.eslora ?? '', e.notas ?? '',
+      cli?.nombre ?? '', e.eslora ?? '', e.notas ?? '',
     ];
   });
   _descargarCSV(
@@ -1640,8 +1787,11 @@ document.getElementById('btnConfirmarMensualidades').addEventListener('click', a
 async function renderConfiguracion() {
   try {
     const cfg = await ConfiguracionService.get();
-    if (cfg?.nombre_guarderia) {
-      document.getElementById('configNombreGuarderia').value = cfg.nombre_guarderia;
+    if (cfg) {
+      if (cfg.nombre_guarderia) document.getElementById('configNombreGuarderia').value = cfg.nombre_guarderia;
+      if (cfg.direccion)        document.getElementById('configDireccion').value        = cfg.direccion;
+      if (cfg.telefono)         document.getElementById('configTelefono').value         = cfg.telefono;
+      if (cfg.cuit)             document.getElementById('configCuit').value             = cfg.cuit;
     }
   } catch (_) { /* no crítico */ }
   // Email siempre del usuario autenticado (solo lectura)
@@ -1664,25 +1814,28 @@ document.getElementById('formConfiguracion').addEventListener('submit', async e 
   successEl.hidden = true;
   setSubmitting(btn, true);
   try {
-    const nombre   = document.getElementById('configNombreGuarderia').value.trim();
-    const pass     = document.getElementById('configPassword').value;
-    const passConf = document.getElementById('configPasswordConfirm').value;
+    const nombre    = document.getElementById('configNombreGuarderia').value.trim();
+    const direccion = document.getElementById('configDireccion').value.trim();
+    const telefono  = document.getElementById('configTelefono').value.trim();
+    const cuit      = document.getElementById('configCuit').value.trim();
+    const pass      = document.getElementById('configPassword').value;
+    const passConf  = document.getElementById('configPasswordConfirm').value;
 
-    // Guardar nombre de guardería
-    await ConfiguracionService.save({ nombre_guarderia: nombre });
+    // Guardar datos de la guardería
+    await ConfiguracionService.save({ nombre_guarderia: nombre, direccion, telefono, cuit });
 
-    // Actualizar nombre en el topnav
+    // Actualizar nombre en el header
     if (nombre) document.getElementById('nombreGuarderia').textContent = nombre;
 
     // Cambiar contraseña solo si se rellenó
     if (pass) {
       if (pass !== passConf) {
-        errEl.textContent = 'Las contraseñas no coinciden.';
+        errEl.textContent = 'Las claves no coinciden.';
         errEl.hidden = false;
         return;
       }
       if (pass.length < 6) {
-        errEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+        errEl.textContent = 'La clave debe tener al menos 6 caracteres.';
         errEl.hidden = false;
         return;
       }
@@ -1692,7 +1845,7 @@ document.getElementById('formConfiguracion').addEventListener('submit', async e 
     document.getElementById('configPassword').value        = '';
     document.getElementById('configPasswordConfirm').value = '';
     successEl.hidden = false;
-    setTimeout(() => { successEl.hidden = true; }, 3500);
+    setTimeout(() => { successEl.hidden = true; closeModal('modalPerfil'); }, 1800);
   } catch (err) {
     errEl.textContent = err.message;
     errEl.hidden = false;
@@ -1722,7 +1875,8 @@ function showApp(user) {
   _currentUser = user;
   document.getElementById('loginScreen').classList.add('app-hidden');
   document.getElementById('appShell').classList.remove('app-hidden');
-  if (user?.email) document.getElementById('userEmail').textContent = user.email;
+  const userEmailEl = document.getElementById('userEmail');
+  if (userEmailEl && user?.email) userEmailEl.textContent = user.email;
 }
 
 /** Muestra la pantalla de login y oculta toda la app. */
@@ -1748,13 +1902,16 @@ async function loadAppData() {
 
   await switchTab('inicio');
   // Pre-carga en background para acceso instantáneo al cambiar de pestaña
-  renderClientes().catch(console.error);
   renderCuotas().catch(console.error);
   renderDashboard().catch(console.error);
-  renderCategorias().catch(console.error);
-  renderMetodosPago().catch(console.error);
-  renderUltimosMovimientos().catch(console.error);
 }
+
+// ─── PERFIL GUARDERIA (modal) ─────────────────────────────────────────────────
+
+document.getElementById('btnPerfilGuarderia').addEventListener('click', async () => {
+  await renderConfiguracion();
+  openModal('modalPerfil');
+});
 
 document.getElementById('linkForgotPassword').addEventListener('click', e => {
   e.preventDefault();
@@ -1810,16 +1967,31 @@ document.getElementById('formLogin').addEventListener('submit', async e => {
   }
 });
 
-document.getElementById('btnLogout').addEventListener('click', async () => {
+async function doLogout() {
+  // Cerrar modal de perfil si está abierto
+  closeModal('modalPerfil');
+
   try {
-    await AuthService.logout();
-    // Limpiar email del sidebar
-    document.getElementById('userEmail').textContent = '';
-    showLogin();
-  } catch (err) {
-    showError('No se pudo cerrar sesion: ' + err.message);
+    // Cerrar sesión en Supabase directamente
+    await db.auth.signOut();
+  } catch (_) {
+    // Ignorar errores de red — continuar con el logout local de todas formas
   }
-});
+
+  // Limpiar estado local
+  localStorage.clear();
+  _currentUser = null;
+
+  // Resetear nombre de guardería al valor por defecto
+  const nombreEl = document.getElementById('nombreGuarderia');
+  if (nombreEl) nombreEl.textContent = 'Mi Guarderia';
+
+  // Volver a la pantalla de login
+  showLogin();
+}
+
+document.getElementById('btnLogout').addEventListener('click', doLogout);
+document.getElementById('btnCerrarSesionPerfil').addEventListener('click', doLogout);
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 

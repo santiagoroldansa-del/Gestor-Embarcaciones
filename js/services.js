@@ -1076,13 +1076,14 @@ const ConfiguracionService = {
    * Guarda (crea o actualiza) la configuración de la guardería.
    * upsert sobre guarderia_id para que sea idempotente.
    */
-  async save({ nombre_guarderia }) {
+  async save({ nombre_guarderia, direccion, telefono, cuit }) {
+    const payload = { guarderia_id: GUARDERIA_ID, nombre_guarderia };
+    if (direccion !== undefined) payload.direccion = direccion;
+    if (telefono  !== undefined) payload.telefono  = telefono;
+    if (cuit      !== undefined) payload.cuit      = cuit;
     const res = await db
       .from('configuracion')
-      .upsert(
-        { guarderia_id: GUARDERIA_ID, nombre_guarderia },
-        { onConflict: 'guarderia_id' }
-      );
+      .upsert(payload, { onConflict: 'guarderia_id' });
     _check(res);
   },
 
