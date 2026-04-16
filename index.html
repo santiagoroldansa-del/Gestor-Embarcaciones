@@ -479,10 +479,18 @@
           <input type="number" id="embEslora" placeholder="12.5" step="0.1" />
         </div>
         <div class="form-group">
-          <label>Propietario</label>
-          <select id="embPropietario" data-placeholder="-- Seleccionar cliente --">
-            <option value="">-- Seleccionar cliente --</option>
+          <label>Titular Principal <span class="badge-titular">Facturación</span></label>
+          <select id="embPropietario" data-placeholder="-- Seleccionar titular --">
+            <option value="">-- Seleccionar titular --</option>
           </select>
+        </div>
+        <div class="form-group">
+          <label>Copropietarios</label>
+          <div class="multiselect-wrapper" id="copropietariosWrapper">
+            <div class="multiselect-tags" id="copropietariosTags"></div>
+            <input type="text" class="multiselect-input" id="copropietariosSearch" placeholder="Buscar y agregar copropietario..." autocomplete="off" />
+            <div class="multiselect-dropdown" id="copropietariosDropdown" hidden></div>
+          </div>
         </div>
         <div class="form-group">
           <label>Notas</label>

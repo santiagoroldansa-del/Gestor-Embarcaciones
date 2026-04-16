@@ -594,17 +594,115 @@ document.getElementById('btnAplicarFiltroDash')?.addEventListener('click', async
 
 // ─── EMBARCACIONES ────────────────────────────────────────────────────────────
 
+// ── Multiselect de copropietarios ─────────────────────────────────────────────
+// Estado módulo-nivel para el multiselect del modal de embarcación.
+let _msClientes  = [];        // todos los clientes disponibles
+let _msSelected  = new Set(); // IDs actualmente seleccionados como copropietarios
+
+function _msRenderTags() {
+  const tagsEl = document.getElementById('copropietariosTags');
+  tagsEl.innerHTML = [..._msSelected].map(id => {
+    const cli = _msClientes.find(c => String(c.id) === id);
+    const nombre = escHTML(cli ? cli.nombre : id);
+    return `<span class="multiselect-tag">${nombre}<button type="button" class="multiselect-tag-remove" data-id="${escHTML(id)}">&times;</button></span>`;
+  }).join('');
+  tagsEl.querySelectorAll('.multiselect-tag-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _msSelected.delete(btn.dataset.id);
+      _msRenderTags();
+      _msRenderDropdown(document.getElementById('copropietariosSearch').value);
+    });
+  });
+}
+
+function _msRenderDropdown(search) {
+  const dropdown = document.getElementById('copropietariosDropdown');
+  const titularId = document.getElementById('embPropietario').value;
+  const q = (search || '').toLowerCase();
+  const filtered = _msClientes.filter(c => {
+    if (String(c.id) === titularId) return false; // excluir al titular principal
+    return !q || c.nombre.toLowerCase().includes(q);
+  });
+  if (filtered.length === 0) {
+    dropdown.innerHTML = '<div class="multiselect-empty">Sin coincidencias</div>';
+  } else {
+    dropdown.innerHTML = filtered.map(c => {
+      const sel = _msSelected.has(String(c.id));
+      return `<div class="multiselect-option${sel ? ' selected' : ''}" data-id="${escHTML(String(c.id))}">
+        <span class="multiselect-check">${sel ? '✓' : ''}</span>${escHTML(c.nombre)}
+      </div>`;
+    }).join('');
+    dropdown.querySelectorAll('.multiselect-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const id = opt.dataset.id;
+        if (_msSelected.has(id)) _msSelected.delete(id);
+        else _msSelected.add(id);
+        _msRenderTags();
+        _msRenderDropdown(document.getElementById('copropietariosSearch').value);
+      });
+    });
+  }
+}
+
+function _msInit(clientes, selectedIds = []) {
+  _msClientes = clientes;
+  _msSelected = new Set(selectedIds.map(String));
+  _msRenderTags();
+  const dropdown = document.getElementById('copropietariosDropdown');
+  dropdown.hidden = true;
+  document.getElementById('copropietariosSearch').value = '';
+}
+
+// Mostrar/ocultar dropdown al enfocar el input de búsqueda
+document.getElementById('copropietariosSearch').addEventListener('focus', () => {
+  const dropdown = document.getElementById('copropietariosDropdown');
+  _msRenderDropdown(document.getElementById('copropietariosSearch').value);
+  dropdown.hidden = false;
+});
+document.getElementById('copropietariosSearch').addEventListener('input', e => {
+  _msRenderDropdown(e.target.value);
+  document.getElementById('copropietariosDropdown').hidden = false;
+});
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener('mousedown', e => {
+  const wrapper = document.getElementById('copropietariosWrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    document.getElementById('copropietariosDropdown').hidden = true;
+  }
+});
+// Recalcular dropdown al cambiar el titular (para excluirlo de la lista)
+document.getElementById('embPropietario').addEventListener('change', () => {
+  // Si el titular recién elegido estaba como copropietario, quitarlo
+  const titularId = document.getElementById('embPropietario').value;
+  if (_msSelected.has(titularId)) {
+    _msSelected.delete(titularId);
+    _msRenderTags();
+  }
+  if (!document.getElementById('copropietariosDropdown').hidden) {
+    _msRenderDropdown(document.getElementById('copropietariosSearch').value);
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function renderEmbarcaciones(filter = '') {
   const tbody = document.getElementById('tablaEmbarcaciones');
   setTableLoading(tbody, 6);
   try {
-    const [embarcaciones, clientes, categorias] = await Promise.all([
+    const [embarcaciones, clientes, categorias, copropRows] = await Promise.all([
       EmbarcacionesService.getAll(),
       ClientesService.getAll(),
       CategoriasService.getAll(),
+      PropietariosSecundariosService.getAllByGuarderia(),
     ]);
     const clienteMap   = new Map(clientes.map(c   => [String(c.id), c]));
     const categoriaMap = new Map(categorias.map(c => [String(c.id), c]));
+    // Agrupa copropietarios por embarcacion_id
+    const copropMap = new Map();
+    copropRows.forEach(r => {
+      const embId = String(r.embarcacion_id);
+      if (!copropMap.has(embId)) copropMap.set(embId, []);
+      copropMap.get(embId).push(String(r.cliente_id));
+    });
 
     let list = embarcaciones;
     if (filter) {
@@ -624,14 +722,24 @@ async function renderEmbarcaciones(filter = '') {
     }
     const _embStart = _pag.emb * PAGE_SIZE;
     tbody.innerHTML = list.slice(_embStart, _embStart + PAGE_SIZE).map(e => {
-      const propId  = e.propietario_id ?? e.propietarioId;
-      const cliente = propId ? clienteMap.get(String(propId)) : null;
-      const cat     = e.categoria_id ? categoriaMap.get(String(e.categoria_id)) : null;
+      const propId   = e.propietario_id ?? e.propietarioId;
+      const titular  = propId ? clienteMap.get(String(propId)) : null;
+      const cat      = e.categoria_id ? categoriaMap.get(String(e.categoria_id)) : null;
+      const copropIds = copropMap.get(String(e.id)) || [];
+      const copropNombres = copropIds
+        .map(id => clienteMap.get(id)?.nombre)
+        .filter(Boolean);
+      const propCell = titular
+        ? `<span class="prop-titular">${escHTML(titular.nombre)}</span>` +
+          (copropNombres.length
+            ? `<div class="prop-copropietarios">(${copropNombres.map(escHTML).join(', ')})</div>`
+            : '')
+        : '—';
       return `<tr>
         <td><strong>${escHTML(e.nombre)}</strong></td>
         <td><code>${escHTML(e.matricula)}</code></td>
         <td>${escHTML(cat ? cat.nombre : '—')}</td>
-        <td>${escHTML(cliente ? cliente.nombre : '—')}</td>
+        <td>${propCell}</td>
         <td>
           <button class="btn-icon" onclick="editEmbarcacion('${escHTML(String(e.id))}')" title="Editar">&#9998;</button>
           <button class="btn-icon delete" onclick="removeEmbarcacion('${escHTML(String(e.id))}')" title="Eliminar">&#128465;</button>
@@ -669,6 +777,7 @@ document.getElementById('btnNuevaEmbarcacion').addEventListener('click', async (
     document.getElementById('modalEmbarcacionTitle').textContent = 'Nueva Embarcacion';
     fillSelect('embPropietario', clientes,   c => c.nombre);
     fillSelect('embCategoria',   categorias, c => `${c.nombre} — ${formatMonto(c.precio_base_mensual)}/mes`);
+    _msInit(clientes, []);
     openModal('modalEmbarcacion');
   } catch (err) {
     showError('No se pudo abrir el formulario: ' + err.message);
@@ -677,10 +786,11 @@ document.getElementById('btnNuevaEmbarcacion').addEventListener('click', async (
 
 async function editEmbarcacion(id) {
   try {
-    const [emb, clientes, categorias] = await Promise.all([
+    const [emb, clientes, categorias, copropIds] = await Promise.all([
       EmbarcacionesService.getById(id),
       ClientesService.getAll(),
       CategoriasService.getAll(),
+      PropietariosSecundariosService.getByEmbarcacion(id),
     ]);
     if (!emb) return;
 
@@ -693,6 +803,7 @@ async function editEmbarcacion(id) {
     const propId = emb.propietario_id ?? emb.propietarioId ?? '';
     fillSelect('embPropietario', clientes,   c => c.nombre, propId);
     fillSelect('embCategoria',   categorias, c => `${c.nombre} — ${formatMonto(c.precio_base_mensual)}/mes`, emb.categoria_id ?? '');
+    _msInit(clientes, copropIds);
     document.getElementById('modalEmbarcacionTitle').textContent = 'Editar Embarcacion';
     openModal('modalEmbarcacion');
   } catch (err) {
@@ -723,15 +834,23 @@ document.getElementById('formEmbarcacion').addEventListener('submit', async e =>
   try {
     const idVal = document.getElementById('embarcacionId').value;
     const data = {
-      nombre:        document.getElementById('embNombre').value.trim(),
-      matricula:     document.getElementById('embMatricula').value.trim(),
-      categoria_id:  document.getElementById('embCategoria').value || null,
-      eslora:        document.getElementById('embEslora').value,
+      nombre:         document.getElementById('embNombre').value.trim(),
+      matricula:      document.getElementById('embMatricula').value.trim(),
+      categoria_id:   document.getElementById('embCategoria').value || null,
+      eslora:         document.getElementById('embEslora').value,
       propietario_id: document.getElementById('embPropietario').value || null,
-      notas:         document.getElementById('embNotas').value.trim(),
+      notas:          document.getElementById('embNotas').value.trim(),
     };
     if (idVal) data.id = idVal;
-    await EmbarcacionesService.save(data);
+    const saved = await EmbarcacionesService.save(data);
+    // Guardar copropietarios (titular principal ya está en embarcaciones.cliente_id)
+    const embId = saved?.id || idVal;
+    if (embId) {
+      // Excluir al titular de la lista de copropietarios por si acaso
+      const titularId = data.propietario_id;
+      const copropIds = [..._msSelected].filter(id => id !== titularId);
+      await PropietariosSecundariosService.setForEmbarcacion(embId, copropIds);
+    }
     closeModal('modalEmbarcacion');
     await Promise.all([renderEmbarcaciones(), renderDashboard()]);
   } catch (err) {

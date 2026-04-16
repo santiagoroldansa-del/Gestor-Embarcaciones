@@ -253,6 +253,66 @@ const EmbarcacionesService = {
   },
 };
 
+// ── SERVICIO: PROPIETARIOS SECUNDARIOS ───────────────────────────────────────
+//
+// Tabla: propietarios_secundarios (id · guarderia_id · embarcacion_id · cliente_id · created_at)
+// Cada fila asocia un copropietario a una embarcación.
+// El Titular Principal siempre es embarcaciones.cliente_id.
+
+const PropietariosSecundariosService = {
+  /**
+   * Devuelve todos los copropietarios de la guardería en una sola consulta.
+   * Returns: [{ embarcacion_id, cliente_id }, ...]
+   */
+  async getAllByGuarderia() {
+    const res = await db
+      .from('propietarios_secundarios')
+      .select('embarcacion_id, cliente_id')
+      .eq('guarderia_id', GUARDERIA_ID);
+    if (res.error) return [];
+    return res.data;
+  },
+
+  /**
+   * Devuelve los IDs de clientes copropietarios de una embarcación.
+   */
+  async getByEmbarcacion(embarcacionId) {
+    const res = await db
+      .from('propietarios_secundarios')
+      .select('cliente_id')
+      .eq('embarcacion_id', embarcacionId)
+      .eq('guarderia_id', GUARDERIA_ID);
+    if (res.error) return [];
+    return res.data.map(r => r.cliente_id);
+  },
+
+  /**
+   * Reemplaza los copropietarios de una embarcación con la lista dada.
+   * Primero borra los existentes, luego inserta los nuevos.
+   */
+  async setForEmbarcacion(embarcacionId, clienteIds) {
+    const delRes = await db
+      .from('propietarios_secundarios')
+      .delete()
+      .eq('embarcacion_id', embarcacionId)
+      .eq('guarderia_id', GUARDERIA_ID);
+    if (delRes.error) throw new Error(delRes.error.message);
+
+    if (!clienteIds || clienteIds.length === 0) return;
+
+    const rows = clienteIds.map(cid => ({
+      guarderia_id:   GUARDERIA_ID,
+      embarcacion_id: embarcacionId,
+      cliente_id:     cid,
+      created_at:     new Date().toISOString(),
+    }));
+    const insRes = await db
+      .from('propietarios_secundarios')
+      .insert(rows);
+    if (insRes.error) throw new Error(insRes.error.message);
+  },
+};
+
 // ── SERVICIO: CLIENTES ────────────────────────────────────────────────────────
 
 const ClientesService = {
