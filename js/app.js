@@ -17,22 +17,51 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
  * @param {string} tabId  'inicio' | 'facturacion' | 'reportes'
  */
 async function switchTab(tabId) {
-  // Actualizar botones
   document.querySelectorAll('.tab-btn').forEach(b => {
     const isActive = b.dataset.tab === tabId;
     b.classList.toggle('active', isActive);
     b.setAttribute('aria-selected', isActive);
   });
-  // Actualizar paneles
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById(`tab-${tabId}`);
   if (panel) panel.classList.add('active');
 
-  // Cargar datos según pestaña
-  if (tabId === 'inicio')      await Promise.all([renderEmbarcaciones(), renderClientes(), renderCategorias(), renderMetodosPago()]);
+  if (tabId === 'inicio')      await _loadSubTab(_activeSubTab);
   if (tabId === 'facturacion') await Promise.all([renderCuotas(), renderUltimosMovimientos()]);
   if (tabId === 'reportes')    await renderDashboard();
 }
+
+// ─── SUB-NAVEGACIÓN (dentro de Inicio) ───────────────────────────────────────
+
+let _activeSubTab = 'flota';
+
+/** Renderiza solo el contenido del sub-tab activo. */
+async function _loadSubTab(subTabId) {
+  if (subTabId === 'flota')     await Promise.all([renderEmbarcaciones()]);
+  if (subTabId === 'clientes')  await Promise.all([renderClientes()]);
+  if (subTabId === 'maestros')  await Promise.all([renderCategorias(), renderMetodosPago()]);
+}
+
+/** Cambia el sub-tab activo dentro de Inicio. */
+async function switchSubTab(subTabId) {
+  _activeSubTab = subTabId;
+  document.querySelectorAll('.sub-tab-btn').forEach(b => {
+    const isActive = b.dataset.subtab === subTabId;
+    b.classList.toggle('active', isActive);
+    b.setAttribute('aria-selected', isActive);
+  });
+  document.querySelectorAll('.sub-tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById(`subtab-${subTabId}`);
+  if (panel) panel.classList.add('active');
+  await _loadSubTab(subTabId);
+}
+
+document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.preventDefault();
+    switchSubTab(btn.dataset.subtab);
+  });
+});
 
 // ─── MODALES ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +146,11 @@ function debounce(fn, ms = 300) {
   };
 }
 
+/** Normaliza texto para búsqueda: minúsculas + sin acentos. */
+function normalize(str) {
+  return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 /** Muestra fila de carga en una tabla mientras se espera el servicio. */
 function setTableLoading(tbody, cols) {
   tbody.innerHTML = `<tr><td colspan="${cols}" class="empty-row">
@@ -194,6 +228,13 @@ function fillSelect(selectId, items, labelFn, selectedId = '') {
 
 const PAGE_SIZE = 5;
 const _pag = { emb: 0, cli: 0 };
+
+// Filtro de estado: 'activos' | 'todos' | 'bajas'
+let _filtroEstadoCli = 'activos';
+// Texto del buscador de clientes
+let _searchClientes = '';
+// ID del cliente abierto en el modal de Cuenta Corriente (para notas)
+let _ccClienteId = null;
 
 function _updatePaginControls(key, total) {
   const suffix = key === 'emb' ? 'Embarcaciones' : 'Clientes';
@@ -686,7 +727,7 @@ document.getElementById('embPropietario').addEventListener('change', () => {
 
 async function renderEmbarcaciones(filter = '') {
   const tbody = document.getElementById('tablaEmbarcaciones');
-  setTableLoading(tbody, 6);
+  setTableLoading(tbody, 7);
   try {
     const [embarcaciones, clientes, categorias, copropRows] = await Promise.all([
       EmbarcacionesService.getAll(),
@@ -706,18 +747,26 @@ async function renderEmbarcaciones(filter = '') {
 
     let list = embarcaciones;
     if (filter) {
-      const f = filter.toLowerCase();
+      const f = normalize(filter);
       list = list.filter(e => {
-        const cat = e.categoria_id ? categoriaMap.get(String(e.categoria_id)) : null;
-        return e.nombre?.toLowerCase().includes(f) ||
-               e.matricula?.toLowerCase().includes(f) ||
-               cat?.nombre?.toLowerCase().includes(f);
+        const cat     = e.categoria_id   ? categoriaMap.get(String(e.categoria_id))   : null;
+        const titular = e.propietario_id ? clienteMap.get(String(e.propietario_id))   : null;
+        return normalize(e.nombre).includes(f)        ||
+               normalize(e.matricula).includes(f)     ||
+               normalize(e.marca).includes(f)         ||
+               normalize(e.modelo).includes(f)        ||
+               normalize(e.motorizacion).includes(f)  ||
+               normalize(cat?.nombre).includes(f)     ||
+               normalize(titular?.nombre).includes(f);
       });
     }
 
     _updatePaginControls('emb', list.length);
     if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin embarcaciones registradas</td></tr>';
+      const msg = filter
+        ? `No se encontraron coincidencias para <strong>&laquo;${escHTML(filter)}&raquo;</strong>`
+        : 'Sin embarcaciones registradas';
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-row">${msg}</td></tr>`;
       return;
     }
     const _embStart = _pag.emb * PAGE_SIZE;
@@ -735,12 +784,15 @@ async function renderEmbarcaciones(filter = '') {
             ? `<div class="prop-copropietarios">(${copropNombres.map(escHTML).join(', ')})</div>`
             : '')
         : '—';
+
       return `<tr>
         <td><strong>${escHTML(e.nombre)}</strong></td>
+        <td class="emb-eslora-cell">${e.eslora ? escHTML(String(e.eslora)) + ' m' : '—'}</td>
         <td><code>${escHTML(e.matricula)}</code></td>
         <td>${escHTML(cat ? cat.nombre : '—')}</td>
         <td>${propCell}</td>
         <td>
+          <button class="btn-icon" onclick="verDetalleEmbarcacion('${escHTML(String(e.id))}')" title="Ver Detalles">&#128065;</button>
           <button class="btn-icon" onclick="editEmbarcacion('${escHTML(String(e.id))}')" title="Editar">&#9998;</button>
           <button class="btn-icon delete" onclick="removeEmbarcacion('${escHTML(String(e.id))}')" title="Eliminar">&#128465;</button>
         </td>
@@ -753,10 +805,10 @@ async function renderEmbarcaciones(filter = '') {
   }
 }
 
-document.getElementById('searchEmbarcaciones').addEventListener('input', e => {
+document.getElementById('searchEmbarcaciones').addEventListener('input', debounce(e => {
   _pag.emb = 0;
   renderEmbarcaciones(e.target.value);
-});
+}, 300));
 
 document.getElementById('prevEmbarcaciones').addEventListener('click', () => {
   if (_pag.emb > 0) { _pag.emb--; renderEmbarcaciones(document.getElementById('searchEmbarcaciones').value); }
@@ -794,11 +846,16 @@ async function editEmbarcacion(id) {
     ]);
     if (!emb) return;
 
-    document.getElementById('embarcacionId').value = emb.id;
-    document.getElementById('embNombre').value     = emb.nombre    || '';
-    document.getElementById('embMatricula').value  = emb.matricula || '';
-    document.getElementById('embEslora').value     = emb.eslora    || '';
-    document.getElementById('embNotas').value      = emb.notas     || '';
+    document.getElementById('embarcacionId').value     = emb.id;
+    document.getElementById('embNombre').value         = emb.nombre       || '';
+    document.getElementById('embMatricula').value      = emb.matricula    || '';
+    document.getElementById('embMarca').value          = emb.marca        || '';
+    document.getElementById('embModelo').value         = emb.modelo       || '';
+    document.getElementById('embMotorizacion').value   = emb.motorizacion || '';
+    document.getElementById('embEslora').value         = emb.eslora       || '';
+    document.getElementById('embManga').value          = emb.manga        || '';
+    document.getElementById('embPuntal').value         = emb.puntal       || '';
+    document.getElementById('embNotas').value          = emb.notas        || '';
 
     const propId = emb.propietario_id ?? emb.propietarioId ?? '';
     fillSelect('embPropietario', clientes,   c => c.nombre, propId);
@@ -827,17 +884,77 @@ async function removeEmbarcacion(id) {
   }
 }
 
+async function verDetalleEmbarcacion(id) {
+  try {
+    const [emb, clientes, categorias, copropIds] = await Promise.all([
+      EmbarcacionesService.getById(id),
+      ClientesService.getAll(),
+      CategoriasService.getAll(),
+      PropietariosSecundariosService.getByEmbarcacion(id),
+    ]);
+    if (!emb) return;
+
+    const clienteMap   = new Map(clientes.map(c => [String(c.id), c]));
+    const categoriaMap = new Map(categorias.map(c => [String(c.id), c]));
+
+    const titular   = emb.propietario_id ? clienteMap.get(String(emb.propietario_id)) : null;
+    const cat       = emb.categoria_id   ? categoriaMap.get(String(emb.categoria_id)) : null;
+    const copropNombres = copropIds
+      .map(cid => clienteMap.get(String(cid))?.nombre)
+      .filter(Boolean);
+
+    document.getElementById('modalDetalleEmbarcacionTitle').textContent =
+      `Ficha Técnica — ${emb.nombre || ''}`;
+
+    const set = (elId, val) => {
+      const el = document.getElementById(elId);
+      if (el) el.textContent = val || '—';
+    };
+
+    set('dembNombre',       emb.nombre);
+    set('dembMatricula',    emb.matricula);
+    set('dembCategoria',    cat ? `${cat.nombre} — $${formatMonto(cat.precio_base_mensual)}/mes` : null);
+    set('dembMarca',        emb.marca);
+    set('dembModelo',       emb.modelo);
+    set('dembMotorizacion', emb.motorizacion);
+    set('dembEslora',       emb.eslora != null ? emb.eslora + ' m' : null);
+    set('dembManga',        emb.manga  != null ? emb.manga  + ' m' : null);
+    set('dembPuntal',       emb.puntal != null ? emb.puntal + ' m' : null);
+    set('dembTitular',      titular ? titular.nombre : null);
+    set('dembCopropietarios', copropNombres.length ? copropNombres.join(', ') : null);
+
+    const notasSection = document.getElementById('dembNotasSection');
+    const notasEl      = document.getElementById('dembNotas');
+    if (emb.notas && emb.notas.trim()) {
+      notasEl.textContent  = emb.notas;
+      notasSection.hidden  = false;
+    } else {
+      notasSection.hidden  = true;
+    }
+
+    openModal('modalDetalleEmbarcacion');
+  } catch (err) {
+    showError('No se pudo cargar el detalle: ' + err.message);
+  }
+}
+
 document.getElementById('formEmbarcacion').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = e.target.querySelector('[type="submit"]');
   setSubmitting(btn, true);
   try {
     const idVal = document.getElementById('embarcacionId').value;
+    const _parseNum = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
     const data = {
       nombre:         document.getElementById('embNombre').value.trim(),
       matricula:      document.getElementById('embMatricula').value.trim(),
       categoria_id:   document.getElementById('embCategoria').value || null,
-      eslora:         document.getElementById('embEslora').value,
+      marca:          document.getElementById('embMarca').value.trim()         || null,
+      modelo:         document.getElementById('embModelo').value.trim()        || null,
+      motorizacion:   document.getElementById('embMotorizacion').value.trim()  || null,
+      eslora:         _parseNum('embEslora'),
+      manga:          _parseNum('embManga'),
+      puntal:         _parseNum('embPuntal'),
       propietario_id: document.getElementById('embPropietario').value || null,
       notas:          document.getElementById('embNotas').value.trim(),
     };
@@ -858,6 +975,14 @@ document.getElementById('formEmbarcacion').addEventListener('submit', async e =>
   } finally {
     setSubmitting(btn, false);
   }
+});
+
+// Validación: campos numéricos de embarcacion solo aceptan dígitos y punto decimal
+['embEslora', 'embManga', 'embPuntal'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function () {
+    // Eliminar cualquier carácter que no sea dígito o punto; evitar doble punto
+    this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+  });
 });
 
 // ─── ÚLTIMOS MOVIMIENTOS ──────────────────────────────────────────────────────
@@ -901,7 +1026,7 @@ async function renderUltimosMovimientos() {
 
 async function renderClientes() {
   const tbody = document.getElementById('tablaClientes');
-  setTableLoading(tbody, 6);
+  setTableLoading(tbody, 7);
   try {
     const [clientes, cuotas] = await Promise.all([
       ClientesService.getAll(),
@@ -920,60 +1045,102 @@ async function renderClientes() {
       }
     });
 
-    // Leer los 3 selectores
-    const sortNombre = document.getElementById('sortClienteNombre').value;    // '' | 'az' | 'za'
-    const estadoFil  = document.getElementById('filtroEstadoCliente').value;  // '' | 'aldia' | 'deudor'
-    const sortDeuda  = document.getElementById('sortClienteDeuda').value;     // '' | 'mayor' | 'menor'
-
-    // Filtrar por estado
-    let list = clientes.filter(c => {
-      const saldo = saldoMap.get(String(c.id)) || 0;
-      if (estadoFil === 'aldia'  && saldo > 0)  return false;
-      if (estadoFil === 'deudor' && saldo <= 0) return false;
-      return true;
-    });
-
-    // Ordenar (prioridad: deuda si está activo, luego nombre)
-    if (sortDeuda === 'mayor') {
-      list.sort((a, b) => (saldoMap.get(String(b.id)) || 0) - (saldoMap.get(String(a.id)) || 0));
-    } else if (sortDeuda === 'menor') {
-      list.sort((a, b) => (saldoMap.get(String(a.id)) || 0) - (saldoMap.get(String(b.id)) || 0));
-    } else if (sortNombre === 'az') {
-      list.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
-    } else if (sortNombre === 'za') {
-      list.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || '', 'es'));
+    // Filtrar pool según botón activo
+    let pool;
+    if (_filtroEstadoCli === 'bajas') {
+      pool = clientes.filter(c => (c.estado || 'Activo') === 'Baja');
+    } else if (_filtroEstadoCli === 'activos') {
+      pool = clientes.filter(c => (c.estado || 'Activo') === 'Activo');
+    } else {
+      pool = [...clientes];
     }
 
-    _updatePaginControls('cli', list.length);
-    if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin clientes para los filtros seleccionados</td></tr>';
+    // Filtros de Al día / Deudor no aplican cuando se muestran bajas
+    const sortNombre = document.getElementById('sortClienteNombre').value;
+    const estadoFil  = document.getElementById('filtroEstadoCliente').value;
+    const sortDeuda  = document.getElementById('sortClienteDeuda').value;
+
+    if (_filtroEstadoCli !== 'bajas') {
+      pool = pool.filter(c => {
+        const saldo = saldoMap.get(String(c.id)) || 0;
+        if (estadoFil === 'aldia'  && saldo > 0)  return false;
+        if (estadoFil === 'deudor' && saldo <= 0) return false;
+        return true;
+      });
+    }
+
+    if (sortDeuda === 'mayor') {
+      pool.sort((a, b) => (saldoMap.get(String(b.id)) || 0) - (saldoMap.get(String(a.id)) || 0));
+    } else if (sortDeuda === 'menor') {
+      pool.sort((a, b) => (saldoMap.get(String(a.id)) || 0) - (saldoMap.get(String(b.id)) || 0));
+    } else if (sortNombre === 'az') {
+      pool.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+    } else if (sortNombre === 'za') {
+      pool.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || '', 'es'));
+    }
+
+    // Búsqueda de texto: nombre/apellido insensible a acentos, o DNI/CUIT/ID exacto
+    if (_searchClientes) {
+      const f = normalize(_searchClientes);
+      pool = pool.filter(c =>
+        normalize(c.nombre).includes(f)   ||
+        normalize(c.dni).includes(f)      ||
+        normalize(String(c.id)).includes(f)
+      );
+    }
+
+    _updatePaginControls('cli', pool.length);
+    if (pool.length === 0) {
+      let msg;
+      if (_searchClientes) {
+        msg = `No se encontraron coincidencias para <strong>&laquo;${escHTML(_searchClientes)}&raquo;</strong>`;
+      } else if (_filtroEstadoCli === 'bajas') {
+        msg = 'Sin clientes dados de baja';
+      } else {
+        msg = 'Sin clientes para los filtros seleccionados';
+      }
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-row">${msg}</td></tr>`;
       return;
     }
 
-    // Transición suave: fade out → actualizar → fade in
     tbody.style.opacity = '0';
     const _cliStart = _pag.cli * PAGE_SIZE;
-    tbody.innerHTML = list.slice(_cliStart, _cliStart + PAGE_SIZE).map(c => {
-      const saldo      = saldoMap.get(String(c.id)) || 0;
+    tbody.innerHTML = pool.slice(_cliStart, _cliStart + PAGE_SIZE).map(c => {
+      const saldo   = saldoMap.get(String(c.id)) || 0;
+      const cid     = escHTML(String(c.id));
+      const enBaja  = (c.estado || 'Activo') === 'Baja';
+
+      const rowClass   = (enBaja && saldo !== 0) ? 'cli-inactivo-deuda' : (enBaja ? 'cli-inactivo' : '');
       const saldoClass = saldo > 0 ? 'badge-red' : 'badge-green';
-      return `<tr>
+
+      // Badge de estado con fecha
+      const estadoBadge = enBaja
+        ? `<span class="badge badge-orange">Baja${c.fecha_baja ? ' · ' + escHTML(c.fecha_baja.slice(0, 10)) : ''}</span>`
+        : `<span class="badge badge-green">Activo</span>`;
+
+      const acciones = enBaja
+        ? `<button class="btn-icon success" onclick="reactivarCliente('${cid}')" title="Reactivar">&#8635;</button>
+           <button class="btn-icon" onclick="verCuentaCorriente('${cid}')" title="Cuenta Corriente">&#128203;</button>
+           <button class="btn-icon" onclick="editCliente('${cid}')" title="Editar">&#9998;</button>`
+        : `<button class="btn-icon" onclick="verCuentaCorriente('${cid}')" title="Cuenta Corriente">&#128203;</button>
+           <button class="btn-icon" onclick="editCliente('${cid}')" title="Editar">&#9998;</button>
+           <button class="btn-icon delete" onclick="removeCliente('${cid}')" title="Dar de baja">&#128465;</button>`;
+
+      return `<tr class="cli-row-interactive ${rowClass}" ondblclick="verCliente360('${cid}')">
         <td><strong>${escHTML(c.nombre)}</strong></td>
         <td>${escHTML(c.dni) || '—'}</td>
         <td>${escHTML(c.telefono) || '—'}</td>
         <td>${escHTML(c.email) || '—'}</td>
         <td><span class="badge ${saldoClass}">$ ${formatMonto(saldo)}</span></td>
-        <td>
-          <button class="btn-icon" onclick="verCuentaCorriente('${escHTML(String(c.id))}')" title="Cuenta Corriente">&#128203;</button>
-          <button class="btn-icon" onclick="editCliente('${escHTML(String(c.id))}')" title="Editar">&#9998;</button>
-          <button class="btn-icon delete" onclick="removeCliente('${escHTML(String(c.id))}')" title="Eliminar">&#128465;</button>
-        </td>
+        <td>${estadoBadge}</td>
+        <td>${acciones}</td>
       </tr>`;
     }).join('');
     requestAnimationFrame(() => { tbody.style.opacity = '1'; });
 
   } catch (err) {
     console.error('renderClientes:', err);
-    setTableError(tbody, 6);
+    setTableError(tbody, 7);
     showError('No se pudieron cargar los clientes: ' + err.message);
   }
 }
@@ -981,6 +1148,25 @@ async function renderClientes() {
 document.getElementById('sortClienteNombre').addEventListener('change', () => { _pag.cli = 0; renderClientes(); });
 document.getElementById('filtroEstadoCliente').addEventListener('change', () => { _pag.cli = 0; renderClientes(); });
 document.getElementById('sortClienteDeuda').addEventListener('change', () => { _pag.cli = 0; renderClientes(); });
+document.getElementById('searchClientes').addEventListener('input', debounce(e => {
+  _searchClientes = e.target.value.trim();
+  _pag.cli = 0;
+  renderClientes();
+}, 300));
+
+document.querySelectorAll('.cli-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.cli-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _filtroEstadoCli = btn.dataset.filter;
+    _pag.cli = 0;
+    const enBajas = _filtroEstadoCli === 'bajas';
+    document.getElementById('sortClienteNombre').disabled   = enBajas;
+    document.getElementById('filtroEstadoCliente').disabled = enBajas;
+    document.getElementById('sortClienteDeuda').disabled    = enBajas;
+    renderClientes();
+  });
+});
 
 document.getElementById('prevClientes').addEventListener('click', () => {
   if (_pag.cli > 0) { _pag.cli--; renderClientes(); }
@@ -993,6 +1179,7 @@ document.getElementById('nextClientes').addEventListener('click', () => {
 document.getElementById('btnNuevoCliente').addEventListener('click', () => {
   document.getElementById('formCliente').reset();
   document.getElementById('clienteId').value = '';
+  document.getElementById('cliEstado').value = 'Activo';
   document.getElementById('modalClienteTitle').textContent = 'Nuevo Cliente';
   openModal('modalCliente');
 });
@@ -1001,12 +1188,13 @@ async function editCliente(id) {
   try {
     const c = await ClientesService.getById(id);
     if (!c) return;
-    document.getElementById('clienteId').value = c.id;
-    document.getElementById('cliNombre').value = c.nombre || '';
-    document.getElementById('cliDni').value = c.dni || '';
-    document.getElementById('cliTelefono').value = c.telefono || '';
-    document.getElementById('cliEmail').value = c.email || '';
+    document.getElementById('clienteId').value    = c.id;
+    document.getElementById('cliNombre').value    = c.nombre    || '';
+    document.getElementById('cliDni').value       = c.dni       || '';
+    document.getElementById('cliTelefono').value  = c.telefono  || '';
+    document.getElementById('cliEmail').value     = c.email     || '';
     document.getElementById('cliDireccion').value = c.direccion || '';
+    document.getElementById('cliEstado').value    = c.estado    || 'Activo';
     document.getElementById('modalClienteTitle').textContent = 'Editar Cliente';
     openModal('modalCliente');
   } catch (err) {
@@ -1017,16 +1205,30 @@ async function editCliente(id) {
 async function removeCliente(id) {
   try {
     const c = await ClientesService.getById(id);
-    confirmDelete(`¿Eliminar al cliente "${c?.nombre}"?`, async () => {
-      try {
-        await ClientesService.delete(id);
-        await Promise.all([renderClientes(), renderDashboard()]);
-      } catch (err) {
-        showError('No se pudo eliminar el cliente: ' + err.message);
+    confirmDelete(
+      `¿Dar de baja al cliente "${c?.nombre}"?\nEl registro se conserva; solo se cambia el estado a Baja con la fecha de hoy.`,
+      async () => {
+        try {
+          await ClientesService.deactivate(id);
+          await Promise.all([renderClientes(), renderDashboard()]);
+          showToast('Cliente dado de baja.');
+        } catch (err) {
+          showError('No se pudo desactivar el cliente: ' + err.message);
+        }
       }
-    });
+    );
   } catch (err) {
     showError(err.message);
+  }
+}
+
+async function reactivarCliente(id) {
+  try {
+    await ClientesService.reactivate(id);
+    await renderClientes();
+    showToast('Cliente reactivado.');
+  } catch (err) {
+    showError('No se pudo reactivar el cliente: ' + err.message);
   }
 }
 
@@ -1064,9 +1266,133 @@ async function verDetalleCliente(clienteId) {
   }
 }
 
+// ─── VISTA 360° DEL CLIENTE ───────────────────────────────────────────────────
+
+async function verCliente360(clienteId) {
+  // Abre el modal inmediatamente con estado de carga
+  document.getElementById('c360Nombre').textContent   = 'Cargando perfil...';
+  document.getElementById('c360Meta').textContent     = '';
+  document.getElementById('c360Saldo').textContent    = '—';
+  document.getElementById('c360Estado').innerHTML     = '';
+  document.getElementById('c360Dni').textContent      = '—';
+  document.getElementById('c360FechaAlta').textContent = '—';
+  document.getElementById('c360Telefono').textContent = '—';
+  const loadingRow = '<p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p>';
+  document.getElementById('c360Embarcaciones').innerHTML = loadingRow;
+  document.getElementById('c360Movimientos').innerHTML   = loadingRow;
+  document.getElementById('c360Notas').innerHTML         = loadingRow;
+  openModal('modalCliente360');
+
+  try {
+    const [cliente, todasEmb, cuotas, pagos, notas] = await Promise.all([
+      ClientesService.getById(clienteId),
+      EmbarcacionesService.getAll(),
+      CuotasService.getAll(),
+      PagosService.getByCliente(clienteId),
+      NotasClientesService.getByCliente(clienteId),
+    ]);
+
+    // ── Cabecera ──────────────────────────────────────────
+    const enBaja = (cliente.estado || 'Activo') === 'Baja';
+    document.getElementById('c360Nombre').textContent    = cliente.nombre || '—';
+    document.getElementById('c360Meta').textContent      = cliente.email  || '';
+    document.getElementById('c360Dni').textContent       = cliente.dni    || '—';
+    document.getElementById('c360Telefono').textContent  = cliente.telefono || '—';
+    document.getElementById('c360FechaAlta').textContent =
+      (cliente.created_at || '').slice(0, 10) || '—';
+    document.getElementById('c360Estado').innerHTML = enBaja
+      ? `<span class="badge badge-orange">Baja${cliente.fecha_baja ? ' · ' + cliente.fecha_baja.slice(0, 10) : ''}</span>`
+      : `<span class="badge badge-green">Activo</span>`;
+
+    // ── Saldo ─────────────────────────────────────────────
+    const cuotasCliente = cuotas.filter(c => String(c.cliente_id) === String(clienteId));
+    const totalDebe  = cuotasCliente.reduce((s, c) => s + Number(c.monto), 0);
+    const totalHaber = pagos.reduce((s, p) => s + Number(p.monto), 0);
+    const saldo = totalDebe - totalHaber;
+    const saldoEl = document.getElementById('c360Saldo');
+    saldoEl.textContent = `$ ${formatMonto(saldo)}`;
+    saldoEl.style.color = saldo > 0 ? 'var(--danger)' : '#15803d';
+
+    // ── Embarcaciones ─────────────────────────────────────
+    const embarcaciones = todasEmb.filter(e => String(e.propietario_id) === String(clienteId));
+    const embEl = document.getElementById('c360Embarcaciones');
+    if (embarcaciones.length === 0) {
+      embEl.innerHTML = '<p class="c360-empty">Sin embarcaciones vinculadas</p>';
+    } else {
+      embEl.innerHTML = embarcaciones.map(e => `
+        <div class="c360-emb-row">
+          <div class="c360-emb-info">
+            <strong>${escHTML(e.nombre)}</strong>
+            <span class="c360-emb-mat">${escHTML(e.matricula) || '—'}</span>
+          </div>
+          <button class="btn-icon" onclick="verDetalleEmbarcacion('${escHTML(String(e.id))}')" title="Ver ficha tecnica">&#128065;</button>
+        </div>`).join('');
+    }
+
+    // ── Últimos 5 movimientos ─────────────────────────────
+    const movs = [];
+    cuotasCliente.forEach(c => {
+      movs.push({ fecha: c.periodo || '', concepto: c.concepto, monto: Number(c.monto), tipo: 'cargo' });
+    });
+    pagos.forEach(p => {
+      const concepto = p.concepto ? `Pago — ${p.concepto}` : 'Pago registrado';
+      movs.push({ fecha: (p.fecha_pago || '').slice(0, 7), concepto, monto: Number(p.monto), tipo: 'pago' });
+    });
+    movs.sort((a, b) => (b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : 0));
+    const ultimos5 = movs.slice(0, 5);
+    const movEl = document.getElementById('c360Movimientos');
+    if (ultimos5.length === 0) {
+      movEl.innerHTML = '<p class="c360-empty">Sin movimientos registrados</p>';
+    } else {
+      movEl.innerHTML = '<div class="c360-movs-list">' + ultimos5.map(m => `
+        <div class="c360-mov-row ${m.tipo === 'pago' ? 'c360-mov-pago' : ''}">
+          <div class="c360-mov-info">
+            <span class="c360-mov-concepto">${escHTML(m.concepto)}</span>
+            <span class="c360-mov-fecha">${escHTML(m.fecha)}</span>
+          </div>
+          <span class="c360-mov-monto" style="color:${m.tipo === 'pago' ? '#15803d' : 'var(--danger)'}">
+            ${m.tipo === 'pago' ? '+' : '−'} $ ${formatMonto(m.monto)}
+          </span>
+        </div>`).join('') + '</div>';
+    }
+
+    // ── Notas ─────────────────────────────────────────────
+    const notasEl = document.getElementById('c360Notas');
+    if (notas.length === 0) {
+      notasEl.innerHTML = '<p class="c360-empty">Sin notas registradas</p>';
+    } else {
+      notasEl.innerHTML = notas.slice(0, 4).map(n => `
+        <div class="c360-nota-row">
+          <span class="c360-nota-fecha">${(n.created_at || '').slice(0, 10)}</span>
+          <span class="c360-nota-texto">${escHTML(n.contenido)}</span>
+        </div>`).join('');
+    }
+
+    // ── Botón historial completo ───────────────────────────
+    document.getElementById('c360BtnCC').onclick = () => {
+      closeModal('modalCliente360');
+      verCuentaCorriente(clienteId);
+    };
+
+  } catch (err) {
+    showError('No se pudo cargar la ficha 360°: ' + err.message);
+  }
+}
+
 // ─── CUENTA CORRIENTE ─────────────────────────────────────────────────────────
 
 async function verCuentaCorriente(clienteId) {
+  // Abre el modal inmediatamente con estado de carga
+  document.getElementById('ccClienteNombre').textContent = 'Cargando perfil...';
+  document.getElementById('ccPrintNombre').textContent   = '';
+  document.getElementById('ccPrintFecha').textContent    = '';
+  document.getElementById('ccTotalDebe').textContent     = '—';
+  document.getElementById('ccTotalHaber').textContent    = '—';
+  document.getElementById('ccSaldoFinal').textContent    = '—';
+  document.getElementById('tablaCuentaCorriente').innerHTML =
+    '<tr><td colspan="5" class="empty-row"><span class="spinner-sm"></span> Cargando movimientos...</td></tr>';
+  openModal('modalCuentaCorriente');
+
   try {
     const [cliente, cuotas, pagos] = await Promise.all([
       ClientesService.getById(clienteId),
@@ -1144,13 +1470,83 @@ async function verCuentaCorriente(clienteId) {
       }).join('');
     }
 
-    openModal('modalCuentaCorriente');
+    _ccClienteId = clienteId;
+    // Cargar notas del cliente en paralelo (no bloquea la apertura del modal)
+    _renderNotasCC(clienteId);
   } catch (err) {
     showError('No se pudo cargar la cuenta corriente: ' + err.message);
   }
 }
 
+async function _renderNotasCC(clienteId) {
+  const lista = document.getElementById('ccNotasList');
+  if (!lista) return;
+  lista.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:4px 0">Cargando notas...</p>';
+  try {
+    const notas = await NotasClientesService.getByCliente(clienteId);
+    if (notas.length === 0) {
+      lista.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:4px 0">Sin notas registradas.</p>';
+      return;
+    }
+    lista.innerHTML = notas.map(n => `
+      <div class="cc-nota-item">
+        <div class="cc-nota-meta">
+          <span class="cc-nota-fecha">${escHTML(n.fecha || n.created_at?.slice(0,10) || '')}</span>
+          <button class="btn-icon delete" style="font-size:11px;padding:2px 5px" onclick="_eliminarNotaCC('${escHTML(String(n.id))}')" title="Eliminar nota">&#128465;</button>
+        </div>
+        <div class="cc-nota-contenido">${escHTML(n.contenido)}</div>
+      </div>
+    `).join('');
+  } catch (_) {
+    lista.innerHTML = '<p style="color:var(--text-muted);font-size:12px">No se pudieron cargar las notas.</p>';
+  }
+}
+
+async function _eliminarNotaCC(notaId) {
+  try {
+    await NotasClientesService.delete(notaId);
+    if (_ccClienteId) _renderNotasCC(_ccClienteId);
+  } catch (err) {
+    showError('No se pudo eliminar la nota: ' + err.message);
+  }
+}
+
 document.getElementById('btnImprimirCC').addEventListener('click', () => window.print());
+
+// ─── NOTAS DE CLIENTE (Cuenta Corriente) ─────────────────────────────────────
+
+document.getElementById('btnToggleNota').addEventListener('click', () => {
+  const form = document.getElementById('ccNotaForm');
+  form.hidden = !form.hidden;
+  if (!form.hidden) document.getElementById('ccNotaContenido').focus();
+});
+
+document.getElementById('btnCancelarNota').addEventListener('click', () => {
+  document.getElementById('ccNotaForm').hidden = true;
+  document.getElementById('ccNotaContenido').value = '';
+});
+
+document.getElementById('btnGuardarNota').addEventListener('click', async () => {
+  const btn       = document.getElementById('btnGuardarNota');
+  const contenido = document.getElementById('ccNotaContenido').value.trim();
+  if (!contenido) { showError('Escribe el contenido de la nota.'); return; }
+  if (!_ccClienteId) return;
+  setSubmitting(btn, true);
+  try {
+    await NotasClientesService.save({
+      clienteId: _ccClienteId,
+      contenido,
+      fecha: new Date().toISOString().slice(0, 10),
+    });
+    document.getElementById('ccNotaContenido').value = '';
+    document.getElementById('ccNotaForm').hidden = true;
+    await _renderNotasCC(_ccClienteId);
+  } catch (err) {
+    showError('No se pudo guardar la nota: ' + err.message);
+  } finally {
+    setSubmitting(btn, false);
+  }
+});
 
 document.getElementById('formCliente').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1164,6 +1560,7 @@ document.getElementById('formCliente').addEventListener('submit', async e => {
       telefono:  document.getElementById('cliTelefono').value.trim(),
       email:     document.getElementById('cliEmail').value.trim(),
       direccion: document.getElementById('cliDireccion').value.trim(),
+      estado:    document.getElementById('cliEstado').value,
     };
     if (idVal) data.id = idVal;
     await ClientesService.save(data);
@@ -1180,7 +1577,7 @@ document.getElementById('formCliente').addEventListener('submit', async e => {
 
 async function renderCategorias(filter = '') {
   const tbody = document.getElementById('tablaCategorias');
-  setTableLoading(tbody, 4);
+  setTableLoading(tbody, 5);
   try {
     let list = await CategoriasService.getAll();
     if (filter) {
@@ -1188,21 +1585,32 @@ async function renderCategorias(filter = '') {
       list = list.filter(c => c.nombre?.toLowerCase().includes(f));
     }
     if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-row">Sin categorias registradas</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Sin categorias registradas</td></tr>';
       return;
     }
-    tbody.innerHTML = list.map(c => `<tr>
-      <td><strong>${escHTML(c.nombre)}</strong></td>
-      <td>${formatMonto(c.precio_base_mensual)}</td>
-      <td>${formatDate(c.created_at)}</td>
-      <td>
-        <button class="btn-icon" onclick="editCategoria('${escHTML(String(c.id))}')" title="Editar">&#9998;</button>
-        <button class="btn-icon delete" onclick="removeCategoria('${escHTML(String(c.id))}')" title="Eliminar">&#128465;</button>
-      </td>
-    </tr>`).join('');
+    tbody.innerHTML = list.map(c => {
+      const IVA_RATE = 0.21;
+      const servicio    = Number(c.precio_base_mensual ?? 0);
+      const fondeadero  = Number(c.tasa_fondeadero ?? 0);
+      const iva         = Math.round(servicio * IVA_RATE * 100) / 100;
+      const total       = servicio + iva + fondeadero;
+      return `<tr>
+        <td>
+          <strong>${escHTML(c.nombre)}</strong>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Total cuota: $ ${formatMonto(total)}</div>
+        </td>
+        <td>$ ${formatMonto(servicio)} <span style="font-size:11px;color:var(--text-muted)">(+IVA $ ${formatMonto(iva)})</span></td>
+        <td>$ ${formatMonto(fondeadero)}</td>
+        <td>${formatDate(c.created_at)}</td>
+        <td>
+          <button class="btn-icon" onclick="editCategoria('${escHTML(String(c.id))}')" title="Editar">&#9998;</button>
+          <button class="btn-icon delete" onclick="removeCategoria('${escHTML(String(c.id))}')" title="Eliminar">&#128465;</button>
+        </td>
+      </tr>`;
+    }).join('');
   } catch (err) {
     console.error('renderCategorias:', err);
-    setTableError(tbody, 4);
+    setTableError(tbody, 5);
     showError('No se pudieron cargar las categorias: ' + err.message);
   }
 }
@@ -1222,9 +1630,10 @@ async function editCategoria(id) {
   try {
     const c = await CategoriasService.getById(id);
     if (!c) return;
-    document.getElementById('categoriaId').value = c.id;
-    document.getElementById('catNombre').value   = c.nombre || '';
-    document.getElementById('catPrecio').value   = c.precio_base_mensual ?? '';
+    document.getElementById('categoriaId').value   = c.id;
+    document.getElementById('catNombre').value     = c.nombre              || '';
+    document.getElementById('catPrecio').value     = c.precio_base_mensual ?? '';
+    document.getElementById('catFondeadero').value = c.tasa_fondeadero     ?? '';
     document.getElementById('modalCategoriaTitle').textContent = 'Editar Categoria';
     openModal('modalCategoria');
   } catch (err) {
@@ -1259,7 +1668,8 @@ document.getElementById('formCategoria').addEventListener('submit', async e => {
     const idVal = document.getElementById('categoriaId').value;
     const data = {
       nombre:              document.getElementById('catNombre').value.trim(),
-      precio_base_mensual: parseFloat(document.getElementById('catPrecio').value),
+      precio_base_mensual: parseFloat(document.getElementById('catPrecio').value)     || 0,
+      tasa_fondeadero:     parseFloat(document.getElementById('catFondeadero').value) || 0,
     };
     if (idVal) data.id = idVal;
     await CategoriasService.save(data);
@@ -1345,6 +1755,29 @@ document.getElementById('formMetodoPago').addEventListener('submit', async e => 
 });
 
 // ─── PAGOS / CUOTAS ──────────────────────────────────────────────────────────
+
+async function verDetalleCuota(cuotaId) {
+  try {
+    const cuota = await CuotasService.getById(cuotaId);
+    if (!cuota) return;
+
+    const servicio   = Number(cuota.monto_servicio   ?? 0);
+    const iva        = Number(cuota.iva              ?? 0);
+    const fondeadero = Number(cuota.monto_fondeadero ?? 0);
+    const total      = Number(cuota.monto            ?? 0);
+
+    document.getElementById('modalDetalleCuotaTitle').textContent = 'Detalle de Cuota';
+    document.getElementById('dcConcepto').textContent  = cuota.concepto || '';
+    document.getElementById('dcServicio').textContent  = `$ ${formatMonto(servicio)}`;
+    document.getElementById('dcIva').textContent       = `$ ${formatMonto(iva)}`;
+    document.getElementById('dcFondeadero').textContent = `$ ${formatMonto(fondeadero)}`;
+    document.getElementById('dcTotal').textContent     = `$ ${formatMonto(total)}`;
+
+    openModal('modalDetalleCuota');
+  } catch (err) {
+    showError('No se pudo cargar el detalle: ' + err.message);
+  }
+}
 
 async function renderCuotas() {
   const tbody = document.getElementById('tablaCuotas');
@@ -1445,13 +1878,15 @@ async function renderCuotas() {
       const montoPagado = Number(item.monto_pagado ?? 0);
       const montoResta  = montoTotal - montoPagado;
 
-      const montoCell = montoPagado > 0
+      const montoInner = montoPagado > 0
         ? `<div class="cuota-monto-detail">
              <span class="cuota-monto-total">Total: <strong>$ ${formatMonto(montoTotal)}</strong></span>
              <span class="cuota-monto-pagado">Pagado: <strong>$ ${formatMonto(montoPagado)}</strong></span>
              <span class="cuota-monto-resta ${montoResta > 0 ? 'resta-pendiente' : ''}">Resta: <strong>$ ${formatMonto(montoResta)}</strong></span>
            </div>`
         : `$ ${formatMonto(montoTotal)}`;
+
+      const montoCell = `<button class="cuota-monto-link" onclick="verDetalleCuota('${cid}')" title="Ver desglose IVA">${montoInner}</button>`;
 
       let btnPrincipal;
       if (item.estado === 'pendiente' || item.estado === 'parcial') {
@@ -1907,10 +2342,12 @@ async function renderConfiguracion() {
   try {
     const cfg = await ConfiguracionService.get();
     if (cfg) {
-      if (cfg.nombre_guarderia) document.getElementById('configNombreGuarderia').value = cfg.nombre_guarderia;
-      if (cfg.direccion)        document.getElementById('configDireccion').value        = cfg.direccion;
-      if (cfg.telefono)         document.getElementById('configTelefono').value         = cfg.telefono;
-      if (cfg.cuit)             document.getElementById('configCuit').value             = cfg.cuit;
+      if (cfg.nombre_guarderia)   document.getElementById('configNombreGuarderia').value  = cfg.nombre_guarderia;
+      if (cfg.direccion)          document.getElementById('configDireccion').value         = cfg.direccion;
+      if (cfg.telefono)           document.getElementById('configTelefono').value          = cfg.telefono;
+      if (cfg.cuit)               document.getElementById('configCuit').value              = cfg.cuit;
+      if (cfg.precio_pie_eslora   != null) document.getElementById('configPrecioPieEslora').value   = cfg.precio_pie_eslora;
+      if (cfg.precio_fijo_mensual != null) document.getElementById('configPrecioFijoMensual').value = cfg.precio_fijo_mensual;
     }
   } catch (_) { /* no crítico */ }
   // Email siempre del usuario autenticado (solo lectura)
@@ -1933,15 +2370,18 @@ document.getElementById('formConfiguracion').addEventListener('submit', async e 
   successEl.hidden = true;
   setSubmitting(btn, true);
   try {
-    const nombre    = document.getElementById('configNombreGuarderia').value.trim();
-    const direccion = document.getElementById('configDireccion').value.trim();
-    const telefono  = document.getElementById('configTelefono').value.trim();
-    const cuit      = document.getElementById('configCuit').value.trim();
-    const pass      = document.getElementById('configPassword').value;
-    const passConf  = document.getElementById('configPasswordConfirm').value;
+    const nombre            = document.getElementById('configNombreGuarderia').value.trim();
+    const direccion         = document.getElementById('configDireccion').value.trim();
+    const telefono          = document.getElementById('configTelefono').value.trim();
+    const cuit              = document.getElementById('configCuit').value.trim();
+    const pass              = document.getElementById('configPassword').value;
+    const passConf          = document.getElementById('configPasswordConfirm').value;
+    const _pn = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+    const precio_pie_eslora   = _pn(document.getElementById('configPrecioPieEslora').value);
+    const precio_fijo_mensual = _pn(document.getElementById('configPrecioFijoMensual').value);
 
-    // Guardar datos de la guardería
-    await ConfiguracionService.save({ nombre_guarderia: nombre, direccion, telefono, cuit });
+    // Guardar datos de la guardería (incluye tasas)
+    await ConfiguracionService.save({ nombre_guarderia: nombre, direccion, telefono, cuit, precio_pie_eslora, precio_fijo_mensual });
 
     // Actualizar nombre en el header
     if (nombre) document.getElementById('nombreGuarderia').textContent = nombre;

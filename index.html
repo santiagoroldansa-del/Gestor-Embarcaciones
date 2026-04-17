@@ -67,8 +67,15 @@
       <!-- ══ PESTAÑA: INICIO ══════════════════════════════════════════════════ -->
       <div class="tab-panel active" id="tab-inicio" role="tabpanel">
 
-        <!-- ── EMBARCACIONES ─────────────────────────────────────────────────── -->
-        <div class="inicio-section">
+        <!-- ── SUB-NAVEGACIÓN ───────────────────────────────────────────────── -->
+        <nav class="sub-nav" role="tablist">
+          <button class="sub-tab-btn active" data-subtab="flota" role="tab" aria-selected="true">Flota</button>
+          <button class="sub-tab-btn" data-subtab="clientes" role="tab" aria-selected="false">Clientes</button>
+          <button class="sub-tab-btn" data-subtab="maestros" role="tab" aria-selected="false">Maestros</button>
+        </nav>
+
+        <!-- ══ SUB-PANEL: FLOTA ════════════════════════════════════════════════ -->
+        <div class="sub-tab-panel active" id="subtab-flota" role="tabpanel">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Embarcaciones</h2>
@@ -76,7 +83,10 @@
             </div>
           </div>
           <div class="section-toolbar">
-            <input type="text" class="search-input" id="searchEmbarcaciones" placeholder="Buscar embarcacion..." />
+            <div class="search-wrap">
+              <span class="search-icon">&#128269;</span>
+              <input type="text" class="search-input" id="searchEmbarcaciones" placeholder="Nombre, matr&#237;cula, marca, modelo, motoriz., titular..." />
+            </div>
             <div style="display:flex;gap:8px">
               <button class="btn btn-secondary" id="btnExportarEmbarcacionesCSV">&#8659; Exportar CSV</button>
               <button class="btn btn-primary" id="btnNuevaEmbarcacion">+ Nueva Embarcacion</button>
@@ -87,6 +97,7 @@
               <thead>
                 <tr>
                   <th>Nombre</th>
+                  <th>Eslora</th>
                   <th>Matricula</th>
                   <th>Categoria</th>
                   <th>Propietario</th>
@@ -94,7 +105,7 @@
                 </tr>
               </thead>
               <tbody id="tablaEmbarcaciones">
-                <tr><td colspan="5" class="empty-row">Sin embarcaciones registradas</td></tr>
+                <tr><td colspan="6" class="empty-row">Sin embarcaciones registradas</td></tr>
               </tbody>
             </table>
           </div>
@@ -105,16 +116,20 @@
           </div>
         </div>
 
-        <!-- ── CLIENTES ──────────────────────────────────────────────────────── -->
-        <div class="inicio-section">
+        <!-- ══ SUB-PANEL: CLIENTES ═════════════════════════════════════════════ -->
+        <div class="sub-tab-panel" id="subtab-clientes" role="tabpanel">
           <div class="panel-header">
             <div>
               <h2 class="panel-title">Clientes</h2>
-              <p class="panel-sub">Gestion de cuentas y saldos</p>
+              <p class="panel-sub">Gesti&#243;n de cuentas y saldos</p>
             </div>
           </div>
           <div class="section-toolbar">
             <div class="clientes-select-bar">
+              <div class="search-wrap search-wrap-cli">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" class="search-input" id="searchClientes" placeholder="Nombre, DNI, CUIT o ID..." />
+              </div>
               <select class="filter-select" id="sortClienteNombre">
                 <option value="">Ordenar por Nombre</option>
                 <option value="az">Nombre A &#8594; Z</option>
@@ -122,7 +137,7 @@
               </select>
               <select class="filter-select" id="filtroEstadoCliente">
                 <option value="">Todos los estados</option>
-                <option value="aldia">Al Dia</option>
+                <option value="aldia">Al D&#237;a</option>
                 <option value="deudor">Deudor</option>
               </select>
               <select class="filter-select" id="sortClienteDeuda">
@@ -130,6 +145,11 @@
                 <option value="mayor">Mayor primero</option>
                 <option value="menor">Menor primero</option>
               </select>
+              <div class="cli-filter-btns">
+                <button class="cli-filter-btn active" data-filter="activos">Activos</button>
+                <button class="cli-filter-btn" data-filter="todos">Todos</button>
+                <button class="cli-filter-btn" data-filter="bajas">Bajas</button>
+              </div>
             </div>
             <div style="display:flex;gap:8px">
               <button class="btn btn-secondary" id="btnExportarClientesCSV">&#8659; Exportar CSV</button>
@@ -142,14 +162,15 @@
                 <tr>
                   <th>Nombre</th>
                   <th>DNI / RUC</th>
-                  <th>Telefono</th>
+                  <th>Tel&#233;fono</th>
                   <th>Email</th>
                   <th>Saldo Pendiente</th>
+                  <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody id="tablaClientes">
-                <tr><td colspan="6" class="empty-row">Sin clientes registrados</td></tr>
+                <tr><td colspan="7" class="empty-row">Sin clientes registrados</td></tr>
               </tbody>
             </table>
           </div>
@@ -160,33 +181,37 @@
           </div>
         </div>
 
-        <!-- ── CATEGORIAS + FORMAS DE PAGO (franja de 2 columnas) ─────────────── -->
-        <div class="inicio-section">
+        <!-- ══ SUB-PANEL: MAESTROS ═════════════════════════════════════════════ -->
+        <div class="sub-tab-panel" id="subtab-maestros" role="tabpanel">
         <div class="two-col-grid">
 
           <!-- Columna izquierda: Categorias -->
           <div>
             <div class="panel-header">
               <div>
-                <h2 class="panel-title">Categorias</h2>
-                <p class="panel-sub">Tipos de embarcacion y precios base mensuales</p>
+                <h2 class="panel-title">Categor&#237;as</h2>
+                <p class="panel-sub">Tipos de embarcaci&#243;n y tarifas</p>
               </div>
             </div>
             <div class="section-toolbar" style="margin-bottom:12px">
-              <input type="text" class="search-input" id="searchCategorias" placeholder="Buscar categoria..." />
+              <div class="search-wrap">
+                <span class="search-icon">&#128269;</span>
+                <input type="text" class="search-input" id="searchCategorias" placeholder="Buscar categor&#237;a..." />
+              </div>
             </div>
             <div class="card">
               <table class="table">
                 <thead>
                   <tr>
                     <th>Nombre</th>
-                    <th>Precio Mensual</th>
+                    <th>Servicio</th>
+                    <th>Fondeadero</th>
                     <th>Creado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tablaCategorias">
-                  <tr><td colspan="4" class="empty-row">Sin categorias registradas</td></tr>
+                  <tr><td colspan="5" class="empty-row">Sin categorias registradas</td></tr>
                 </tbody>
               </table>
             </div>
@@ -200,7 +225,7 @@
             <div class="panel-header">
               <div>
                 <h2 class="panel-title">Formas de Pago</h2>
-                <p class="panel-sub">Metodos disponibles al registrar pagos</p>
+                <p class="panel-sub">M&#233;todos disponibles al registrar pagos</p>
               </div>
             </div>
             <div class="card">
@@ -222,7 +247,7 @@
           </div>
 
         </div><!-- /.two-col-grid -->
-        </div><!-- /.inicio-section -->
+        </div><!-- /#subtab-maestros -->
 
       </div>
 
@@ -474,9 +499,35 @@
             </select>
           </div>
         </div>
-        <div class="form-group">
-          <label>Eslora (m)</label>
-          <input type="number" id="embEslora" placeholder="12.5" step="0.1" />
+        <div class="form-row">
+          <div class="form-group">
+            <label>Marca</label>
+            <input type="text" id="embMarca" placeholder="Ej: Ferretti" />
+          </div>
+          <div class="form-group">
+            <label>Modelo</label>
+            <input type="text" id="embModelo" placeholder="Ej: 550" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Motorización</label>
+            <input type="text" id="embMotorizacion" placeholder="Ej: 2x Volvo 300HP" />
+          </div>
+          <div class="form-group">
+            <label>Eslora (m)</label>
+            <input type="number" id="embEslora" placeholder="12.50" step="0.01" min="0" inputmode="decimal" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Manga (m)</label>
+            <input type="number" id="embManga" placeholder="3.50" step="0.01" min="0" inputmode="decimal" />
+          </div>
+          <div class="form-group">
+            <label>Puntal (m)</label>
+            <input type="number" id="embPuntal" placeholder="1.20" step="0.01" min="0" inputmode="decimal" />
+          </div>
         </div>
         <div class="form-group">
           <label>Titular Principal <span class="badge-titular">Facturación</span></label>
@@ -537,6 +588,13 @@
           <label>Direccion</label>
           <input type="text" id="cliDireccion" placeholder="Calle, ciudad" />
         </div>
+        <div class="form-group">
+          <label>Estado</label>
+          <select id="cliEstado">
+            <option value="Activo">Activo</option>
+            <option value="Baja">Baja</option>
+          </select>
+        </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-modal="modalCliente">Cancelar</button>
           <button type="submit" class="btn btn-primary">Guardar</button>
@@ -559,8 +617,12 @@
           <input type="text" id="catNombre" required placeholder="Ej: Lancha, Crucero, Moto de agua" />
         </div>
         <div class="form-group">
-          <label>Precio Base Mensual</label>
+          <label>Precio del Servicio <span class="label-hint">(base para IVA 21%)</span></label>
           <input type="number" id="catPrecio" required placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Tasa Fondeadero <span class="label-hint">(sin IVA)</span></label>
+          <input type="number" id="catFondeadero" placeholder="0.00" step="0.01" min="0" />
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-modal="modalCategoria">Cancelar</button>
@@ -663,6 +725,22 @@
           </table>
         </div>
       </div>
+      <!-- ── Notas del cliente ──────────────────────────────────────────── -->
+      <div class="cc-notas-section no-print">
+        <div class="cc-notas-header">
+          <span class="cc-notas-title">&#128221; Notas</span>
+          <button type="button" class="btn btn-secondary" id="btnToggleNota" style="font-size:12px;padding:5px 12px">+ Agregar nota</button>
+        </div>
+        <div id="ccNotasList"></div>
+        <div id="ccNotaForm" hidden style="margin-top:8px">
+          <textarea id="ccNotaContenido" rows="2" placeholder="Escribir nota..." style="width:100%;resize:vertical;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit"></textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+            <button type="button" class="btn btn-secondary" id="btnCancelarNota" style="font-size:12px;padding:5px 12px">Cancelar</button>
+            <button type="button" class="btn btn-primary"   id="btnGuardarNota"  style="font-size:12px;padding:5px 12px">Guardar nota</button>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-footer no-print">
         <button class="btn btn-secondary" data-modal="modalCuentaCorriente">Cerrar</button>
       </div>
@@ -782,6 +860,162 @@
     </div>
   </div>
 
+  <!-- MODAL DETALLE CUOTA -->
+  <div class="modal-overlay" id="modalDetalleCuota">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="modalDetalleCuotaTitle">Detalle de Cuota</h3>
+        <button class="modal-close" data-modal="modalDetalleCuota">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="dcConcepto" style="font-size:13px;color:var(--text-muted);margin-bottom:16px"></p>
+        <div class="cuota-breakdown">
+          <div class="cuota-breakdown-row">
+            <span>Servicio</span>
+            <span id="dcServicio">$ 0,00</span>
+          </div>
+          <div class="cuota-breakdown-row">
+            <span>IVA (21% sobre servicio)</span>
+            <span id="dcIva">$ 0,00</span>
+          </div>
+          <div class="cuota-breakdown-row">
+            <span>Tasa Fondeadero</span>
+            <span id="dcFondeadero">$ 0,00</span>
+          </div>
+          <div class="cuota-breakdown-divider"></div>
+          <div class="cuota-breakdown-row cuota-breakdown-total">
+            <span>TOTAL</span>
+            <span id="dcTotal">$ 0,00</span>
+          </div>
+        </div>
+        <p class="cuota-breakdown-nota">* El IVA se aplica &#250;nicamente sobre el concepto de servicio brindado.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalDetalleCuota">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DETALLE EMBARCACION -->
+  <div class="modal-overlay" id="modalDetalleEmbarcacion">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalDetalleEmbarcacionTitle">Ficha Técnica</h3>
+        <button class="modal-close" data-modal="modalDetalleEmbarcacion">&times;</button>
+      </div>
+      <div class="modal-body" id="modalDetalleEmbarcacionBody">
+        <!-- Sección: Datos Generales -->
+        <div class="detalle-section">
+          <div class="detalle-section-title">Datos Generales</div>
+          <div class="detalle-grid">
+            <div class="detalle-field"><span class="detalle-label">Nombre</span><span class="detalle-value" id="dembNombre">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Matrícula</span><span class="detalle-value" id="dembMatricula">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Categoría</span><span class="detalle-value" id="dembCategoria">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Marca</span><span class="detalle-value" id="dembMarca">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Modelo</span><span class="detalle-value" id="dembModelo">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Motorización</span><span class="detalle-value" id="dembMotorizacion">—</span></div>
+          </div>
+        </div>
+
+        <!-- Sección: Dimensiones -->
+        <div class="detalle-section">
+          <div class="detalle-section-title">Dimensiones</div>
+          <div class="detalle-grid detalle-grid-3">
+            <div class="detalle-field"><span class="detalle-label">Eslora</span><span class="detalle-value" id="dembEslora">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Manga</span><span class="detalle-value" id="dembManga">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Puntal</span><span class="detalle-value" id="dembPuntal">—</span></div>
+          </div>
+        </div>
+
+        <!-- Sección: Propietarios -->
+        <div class="detalle-section">
+          <div class="detalle-section-title">Propietarios</div>
+          <div class="detalle-grid">
+            <div class="detalle-field"><span class="detalle-label">Titular Principal</span><span class="detalle-value" id="dembTitular">—</span></div>
+            <div class="detalle-field"><span class="detalle-label">Copropietarios</span><span class="detalle-value" id="dembCopropietarios">—</span></div>
+          </div>
+        </div>
+
+        <!-- Sección: Observaciones -->
+        <div class="detalle-section" id="dembNotasSection">
+          <div class="detalle-section-title">Observaciones</div>
+          <div class="detalle-notas" id="dembNotas"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalDetalleEmbarcacion">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CLIENTE 360° -->
+  <div class="modal-overlay" id="modalCliente360">
+    <div class="modal modal-360">
+      <div class="modal-header">
+        <div>
+          <h3 id="c360Nombre">Ficha del Cliente</h3>
+          <div id="c360Meta" style="font-size:12px;color:var(--text-muted);margin-top:2px"></div>
+        </div>
+        <button class="modal-close" data-modal="modalCliente360">&times;</button>
+      </div>
+      <div class="modal-body c360-body">
+
+        <!-- KPI + datos de cabecera -->
+        <div class="c360-header-strip">
+          <div class="c360-kpi-main">
+            <span class="c360-kpi-label">Saldo Total Adeudado</span>
+            <span class="c360-kpi-val" id="c360Saldo">—</span>
+          </div>
+          <div class="c360-kpi-side">
+            <div class="c360-kpi-sm">
+              <span class="c360-kpi-label">Estado</span>
+              <span id="c360Estado"></span>
+            </div>
+            <div class="c360-kpi-sm">
+              <span class="c360-kpi-label">DNI / CUIT</span>
+              <span class="c360-kpi-meta" id="c360Dni">—</span>
+            </div>
+            <div class="c360-kpi-sm">
+              <span class="c360-kpi-label">Fecha de Alta</span>
+              <span class="c360-kpi-meta" id="c360FechaAlta">—</span>
+            </div>
+            <div class="c360-kpi-sm">
+              <span class="c360-kpi-label">Telefono</span>
+              <span class="c360-kpi-meta" id="c360Telefono">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grid de tarjetas -->
+        <div class="c360-grid">
+
+          <!-- Embarcaciones -->
+          <div class="c360-card">
+            <div class="c360-card-title">&#9875; Embarcaciones</div>
+            <div id="c360Embarcaciones"><p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p></div>
+          </div>
+
+          <!-- Movimientos recientes -->
+          <div class="c360-card">
+            <div class="c360-card-title">&#128203; Ultimos Movimientos</div>
+            <div id="c360Movimientos"><p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p></div>
+            <button type="button" class="btn btn-secondary c360-link-btn" id="c360BtnCC">Ver historial completo &rarr;</button>
+          </div>
+
+          <!-- Notas -->
+          <div class="c360-card c360-card-full">
+            <div class="c360-card-title">&#128221; Notas</div>
+            <div id="c360Notas"><p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p></div>
+          </div>
+
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modalCliente360">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL CONFIRMACION -->
   <div class="modal-overlay" id="modalConfirm">
     <div class="modal modal-sm">
@@ -893,6 +1127,23 @@
         <div class="form-group">
           <label>Direccion</label>
           <input type="text" id="configDireccion" placeholder="Calle, ciudad, provincia" />
+        </div>
+
+        <div class="config-divider"></div>
+
+        <!-- Tasas -->
+        <div class="config-section-header">
+          <h3 class="config-section-title">Tasas</h3>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Precio por pie de eslora ($/pie/mes)</label>
+            <input type="number" id="configPrecioPieEslora" placeholder="0.00" step="0.01" min="0" inputmode="decimal" />
+          </div>
+          <div class="form-group">
+            <label>Precio fijo mensual ($)</label>
+            <input type="number" id="configPrecioFijoMensual" placeholder="0.00" step="0.01" min="0" inputmode="decimal" />
+          </div>
         </div>
 
         <div class="config-divider"></div>

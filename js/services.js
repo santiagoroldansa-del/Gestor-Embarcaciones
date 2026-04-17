@@ -340,7 +340,8 @@ const ClientesService = {
     const { id, ...fields } = data;
 
     if (!id) {
-      // _clienteToDb también descarta updated_at que _metaNuevo() incluye
+      // Nuevo cliente: asegurar estado por defecto
+      if (!fields.estado) fields.estado = 'Activo';
       const dbData = _clienteToDb({ ...fields, ..._metaNuevo() });
       const res = await db
         .from('clientes')
@@ -351,7 +352,27 @@ const ClientesService = {
       return _clienteFromDb(res.data);
     }
 
-    // _clienteToDb descarta updated_at (la tabla no tiene esa columna)
+    // Update: detectar cambio de estado para registrar fechas automáticamente
+    if (fields.estado !== undefined) {
+      const curRes = await db
+        .from('clientes')
+        .select('estado')
+        .eq('id', id)
+        .single();
+      if (!curRes.error && curRes.data) {
+        const prev = curRes.data.estado || 'Activo';
+        if (prev !== fields.estado) {
+          if (fields.estado === 'Baja') {
+            fields.fecha_baja = new Date().toISOString();
+            fields.fecha_alta = null;
+          } else if (fields.estado === 'Activo') {
+            fields.fecha_baja = null;
+            fields.fecha_alta = new Date().toISOString();
+          }
+        }
+      }
+    }
+
     const dbData = _clienteToDb({ ...fields, ..._metaUpdate() });
     const res = await db
       .from('clientes')
@@ -363,11 +384,71 @@ const ClientesService = {
     return _clienteFromDb(res.data);
   },
 
+  /** Soft-delete: cambia estado a 'Baja' y registra el timestamp exacto. No borra el registro. */
+  async deactivate(id) {
+    const res = await db
+      .from('clientes')
+      .update({ estado: 'Baja', fecha_baja: new Date().toISOString() })
+      .eq('id', id);
+    _check(res);
+  },
+
+  /** Reactiva un cliente en Baja: vuelve a 'Activo', limpia fecha_baja y registra fecha_alta. */
+  async reactivate(id) {
+    const res = await db
+      .from('clientes')
+      .update({ estado: 'Activo', fecha_baja: null, fecha_alta: new Date().toISOString() })
+      .eq('id', id);
+    _check(res);
+  },
+
   async delete(id) {
     const res = await db
       .from('clientes')
       .delete()
       .eq('id', id);
+    _check(res);
+  },
+};
+
+// ── SERVICIO: NOTAS DE CLIENTES ──────────────────────────────────────────────
+//
+// Tabla: notas_clientes (id · guarderia_id · cliente_id · contenido · fecha · created_at)
+
+const NotasClientesService = {
+  async getByCliente(clienteId) {
+    const res = await db
+      .from('notas_clientes')
+      .select('*')
+      .eq('guarderia_id', GUARDERIA_ID)
+      .eq('cliente_id', clienteId)
+      .order('created_at', { ascending: false });
+    if (res.error) return [];
+    return res.data;
+  },
+
+  async save({ clienteId, contenido, fecha }) {
+    const res = await db
+      .from('notas_clientes')
+      .insert({
+        guarderia_id: GUARDERIA_ID,
+        cliente_id:   clienteId,
+        contenido:    contenido.trim(),
+        fecha:        fecha || new Date().toISOString().slice(0, 10),
+        created_at:   new Date().toISOString(),
+      })
+      .select()
+      .single();
+    _check(res);
+    return res.data;
+  },
+
+  async delete(id) {
+    const res = await db
+      .from('notas_clientes')
+      .delete()
+      .eq('id', id)
+      .eq('guarderia_id', GUARDERIA_ID);
     _check(res);
   },
 };
@@ -1023,21 +1104,30 @@ const CuotasService = {
 
     const catMap = new Map(categorias.map(c => [String(c.id), c]));
 
+    const IVA_RATE = 0.21;
+
     // Solo construir cuotas para las embarcaciones que FALTAN
     const cuotas = embarcaciones
       .filter(e => e.categoria_id && e.propietario_id && !yaGenerados.has(String(e.id)))
       .map(e => {
         const cat = catMap.get(String(e.categoria_id));
         if (!cat) return null;
+        const montoServicio   = Number(cat.precio_base_mensual ?? 0);
+        const montoFondeadero = Number(cat.tasa_fondeadero     ?? 0);
+        const iva             = Math.round(montoServicio * IVA_RATE * 100) / 100;
+        const montoTotal      = montoServicio + iva + montoFondeadero;
         return _cuotaToDb({
-          guarderia_id:   GUARDERIA_ID,
-          cliente_id:     e.propietario_id,
-          embarcacion_id: e.id,
-          categoria_id:   e.categoria_id,
-          concepto:       `Mensualidad ${periodo} — ${e.nombre} (${cat.nombre})`,
-          monto:          cat.precio_base_mensual,
+          guarderia_id:     GUARDERIA_ID,
+          cliente_id:       e.propietario_id,
+          embarcacion_id:   e.id,
+          categoria_id:     e.categoria_id,
+          concepto:         `Mensualidad ${periodo} — ${e.nombre} (${cat.nombre})`,
+          monto:            montoTotal,
+          monto_servicio:   montoServicio,
+          monto_fondeadero: montoFondeadero,
+          iva,
           periodo,
-          estado:         'pendiente',
+          estado:           'pendiente',
         });
       })
       .filter(Boolean);
@@ -1136,11 +1226,13 @@ const ConfiguracionService = {
    * Guarda (crea o actualiza) la configuración de la guardería.
    * upsert sobre guarderia_id para que sea idempotente.
    */
-  async save({ nombre_guarderia, direccion, telefono, cuit }) {
+  async save({ nombre_guarderia, direccion, telefono, cuit, precio_pie_eslora, precio_fijo_mensual }) {
     const payload = { guarderia_id: GUARDERIA_ID, nombre_guarderia };
-    if (direccion !== undefined) payload.direccion = direccion;
-    if (telefono  !== undefined) payload.telefono  = telefono;
-    if (cuit      !== undefined) payload.cuit      = cuit;
+    if (direccion           !== undefined) payload.direccion           = direccion;
+    if (telefono            !== undefined) payload.telefono            = telefono;
+    if (cuit                !== undefined) payload.cuit                = cuit;
+    if (precio_pie_eslora   !== undefined) payload.precio_pie_eslora   = precio_pie_eslora   ?? null;
+    if (precio_fijo_mensual !== undefined) payload.precio_fijo_mensual = precio_fijo_mensual ?? null;
     const res = await db
       .from('configuracion')
       .upsert(payload, { onConflict: 'guarderia_id' });

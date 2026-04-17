@@ -260,7 +260,7 @@ body {
 
 .tab-panel {
   display: none;
-  padding: 30px 32px;
+  padding: 28px 32px;
   max-width: 1380px;
   margin: 0 auto;
   animation: panelFadeIn .2s ease;
@@ -271,6 +271,45 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ─── SUB-NAVEGACIÓN (dentro de Inicio) ──────────────────── */
+.sub-nav {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 26px;
+  padding-bottom: 0;
+}
+.sub-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: 9px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: color .18s, border-color .18s, background .18s;
+  white-space: nowrap;
+}
+.sub-tab-btn:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+.sub-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: none;
+}
+
+/* ─── SUB-PANELES ─────────────────────────────────────────── */
+.sub-tab-panel {
+  display: none;
+  animation: panelFadeIn .18s ease;
+}
+.sub-tab-panel.active { display: block; }
 
 /* ─── PANEL HEADER ────────────────────────────────────────── */
 .panel-header {
@@ -569,10 +608,28 @@ body {
   padding-left: 10px;
 }
 
-.search-input {
+.search-wrap {
+  position: relative;
   flex: 1;
+  min-width: 220px;
+}
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+  line-height: 1;
+}
+.search-wrap-cli {
   min-width: 200px;
-  padding: 9px 14px;
+  flex: 0 1 200px;
+}
+.search-input {
+  width: 100%;
+  padding: 9px 14px 9px 34px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -898,6 +955,7 @@ body {
 .badge-yellow  { background: #fef9c3; color: #a16207; }
 .badge-gray    { background: #f1f5f9; color: #475569; }
 .badge-red     { background: #fee2e2; color: #b91c1c; }
+.badge-orange  { background: #ffedd5; color: #c2410c; }
 .badge-violet  { background: #ede9fe; color: #6d28d9; border: 1px solid #c4b5fd; }
 .badge-parcial { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 
@@ -1129,6 +1187,17 @@ body {
   vertical-align: middle;
   margin-right: 6px;
 }
+.spinner-sm {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  vertical-align: middle;
+  margin-right: 5px;
+}
 
 /* ─── REGISTRAR PAGO ──────────────────────────────────────── */
 .pago-info-box {
@@ -1281,6 +1350,148 @@ body {
 .multiselect-check { width: 14px; font-size: 11px; color: var(--accent); flex-shrink: 0; }
 .multiselect-empty { padding: 10px 14px; color: var(--text-muted); font-size: 13px; font-style: italic; }
 
+/* ─── FILTRO ACTIVOS / TODOS / BAJAS ─────────────────────────── */
+.cli-filter-btns {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.cli-filter-btn {
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--border);
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.cli-filter-btn:last-child { border-right: none; }
+.cli-filter-btn:hover { background: var(--bg); color: var(--text); }
+.cli-filter-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.cli-filter-btn[data-filter="bajas"].active {
+  background: #c2410c;
+}
+
+/* ─── FILAS INTERACTIVAS (doble clic) ───────────────────────── */
+.cli-row-interactive { cursor: pointer; }
+.cli-row-interactive:not(.cli-inactivo-deuda):hover td { background: var(--bg); }
+
+/* ─── FILAS DE CLIENTES DADOS DE BAJA ───────────────────────── */
+.cli-inactivo td { opacity: 0.65; }
+.cli-inactivo-deuda td { background: #fff1f2 !important; }
+.cli-inactivo-deuda td:first-child { border-left: 3px solid var(--danger); }
+.btn-icon.success {
+  color: var(--success);
+  border-color: transparent;
+  background: transparent;
+}
+.btn-icon.success:hover { background: #dcfce7; }
+
+/* ─── NOTAS EN CUENTA CORRIENTE ──────────────────────────────── */
+.cc-notas-section {
+  border-top: 1px solid var(--border);
+  margin: 0 24px 16px;
+  padding-top: 14px;
+}
+.cc-notas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.cc-notas-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.cc-nota-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 6px;
+}
+.cc-nota-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.cc-nota-fecha {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.cc-nota-contenido {
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+/* ─── TOOLTIP DATOS TÉCNICOS EMBARCACION ─────────────────────── */
+.emb-nombre-cell { white-space: nowrap; }
+.emb-eslora-cell { white-space: nowrap; color: var(--text-muted); font-size: 13px; }
+.emb-tech-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-left: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-size: 11px;
+  font-style: normal;
+  cursor: default;
+  vertical-align: middle;
+  overflow: visible;
+}
+.emb-tech-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  padding: 10px 14px;
+  min-width: 190px;
+  z-index: 9999;
+  white-space: normal;
+  pointer-events: none;
+}
+.emb-tech-icon:hover .emb-tech-tooltip,
+.emb-tech-icon:focus .emb-tech-tooltip { display: flex; flex-direction: column; gap: 5px; }
+.emb-tech-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 5px;
+  margin-bottom: 2px;
+}
+.emb-tech-row {
+  font-size: 12px;
+  color: var(--text);
+  display: block;
+}
+.emb-tech-row b { color: var(--text-muted); font-weight: 600; }
+
 /* ─── PROPIETARIOS EN TABLA ───────────────────────────────── */
 .prop-titular { font-weight: 700; }
 .prop-copropietarios {
@@ -1289,6 +1500,129 @@ body {
   margin-top: 1px;
   line-height: 1.4;
 }
+
+/* ─── CLIENTE 360° ────────────────────────────────────────── */
+.modal-360 { max-width: 780px; }
+.c360-body { padding: 20px 24px; }
+
+.c360-header-strip {
+  display: flex;
+  gap: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  align-items: flex-start;
+}
+.c360-kpi-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  padding-right: 20px;
+  border-right: 1px solid var(--border);
+}
+.c360-kpi-val {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+.c360-kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.c360-kpi-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  flex: 1;
+}
+.c360-kpi-sm {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.c360-kpi-meta {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.c360-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.c360-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.c360-card-full { grid-column: 1 / -1; }
+.c360-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.c360-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+
+/* Embarcaciones */
+.c360-emb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.c360-emb-row:last-child { border-bottom: none; }
+.c360-emb-info { display: flex; flex-direction: column; gap: 1px; }
+.c360-emb-mat { font-size: 11px; color: var(--text-muted); }
+
+/* Movimientos */
+.c360-movs-list { display: flex; flex-direction: column; gap: 0; }
+.c360-mov-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.c360-mov-row:last-child { border-bottom: none; }
+.c360-mov-row.c360-mov-pago { background: none; }
+.c360-mov-info { display: flex; flex-direction: column; gap: 1px; }
+.c360-mov-concepto { font-weight: 500; color: var(--text); }
+.c360-mov-fecha { font-size: 11px; color: var(--text-muted); }
+.c360-mov-monto { font-weight: 700; font-size: 13px; white-space: nowrap; }
+.c360-link-btn { font-size: 12px; margin-top: auto; }
+
+/* Notas */
+.c360-nota-row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.c360-nota-row:last-child { border-bottom: none; }
+.c360-nota-fecha { font-size: 11px; color: var(--text-muted); white-space: nowrap; padding-top: 2px; }
+.c360-nota-texto { flex: 1; color: var(--text); line-height: 1.4; }
 
 /* ─── CUENTA CORRIENTE ────────────────────────────────────── */
 .modal-cc { max-width: 720px; }
@@ -1372,4 +1706,109 @@ body {
   .stats-grid { grid-template-columns: 1fr; }
   .tab-btn { padding: 8px 10px; font-size: 12px; }
   .btn-guarderia { display: none; }
+}
+
+/* ─── LABEL HINT ─────────────────────────────────────────── */
+.label-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* ─── DETALLE DE CUOTA (breakdown IVA) ───────────────────── */
+.cuota-breakdown {
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cuota-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+.cuota-breakdown-row span:first-child { color: var(--text-muted); }
+.cuota-breakdown-row span:last-child  { font-weight: 600; }
+.cuota-breakdown-divider {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+.cuota-breakdown-total {
+  font-size: 16px;
+}
+.cuota-breakdown-total span { color: var(--text) !important; font-weight: 800 !important; }
+.cuota-breakdown-nota {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* ─── MONTO COMO LINK EN TABLA CUOTAS ────────────────────── */
+.cuota-monto-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cuota-monto-link:hover { color: var(--accent-dark); }
+
+/* ─── MODAL DETALLE EMBARCACION ───────────────────────────── */
+.detalle-section {
+  margin-bottom: 20px;
+}
+.detalle-section:last-child { margin-bottom: 0; }
+.detalle-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+}
+.detalle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 20px;
+}
+.detalle-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.detalle-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.detalle-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.detalle-value {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+.detalle-notas {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  min-height: 40px;
+}
+@media (max-width: 540px) {
+  .detalle-grid, .detalle-grid-3 { grid-template-columns: 1fr; }
 }
