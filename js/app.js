@@ -233,6 +233,7 @@ const _pag = { emb: 0, cli: 0 };
 let _filtroEstadoCli = 'activos';
 // Texto del buscador de clientes
 let _searchClientes = '';
+let _searchCuotas   = '';
 // ID del cliente abierto en el modal de Cuenta Corriente (para notas)
 let _ccClienteId = null;
 let _c360Data    = null;
@@ -597,7 +598,9 @@ document.getElementById('btnFiltrarCuotas')?.addEventListener('click', async () 
     _filtroFecha.desde  = '';
     _filtroFecha.hasta  = '';
     document.getElementById('filtroPresetCuotas').value  = 'todo';
-    document.getElementById('filtroTipoCuota').value     = '';
+    _searchCuotas = '';
+    const searchInput = document.getElementById('searchCuotas');
+    if (searchInput) searchInput.value = '';
     document.getElementById('filtroClienteCuotas').value = '';
     document.getElementById('filtroRangoCuotas').style.display = 'none';
     _filterBtnReset(btn);
@@ -1165,6 +1168,11 @@ document.getElementById('searchClientes').addEventListener('input', debounce(e =
   _searchClientes = e.target.value.trim();
   _pag.cli = 0;
   renderClientes();
+}, 300));
+
+document.getElementById('searchCuotas')?.addEventListener('input', debounce(e => {
+  _searchCuotas = e.target.value.trim();
+  renderCuotas();
 }, 300));
 
 document.querySelectorAll('.cli-filter-btn').forEach(btn => {
@@ -1943,12 +1951,9 @@ async function renderCuotas() {
 
     // Leer filtros
     const clienteId = document.getElementById('filtroClienteCuotas').value;
-    const tipoCuota = document.getElementById('filtroTipoCuota').value; // '' | 'mensualidad' | 'extra'
 
-    // Combinar según filtro de tipo
-    let pool = [];
-    if (tipoCuota !== 'extra')       pool = pool.concat(cuotasNorm);
-    if (tipoCuota !== 'mensualidad') pool = pool.concat(extrasNorm);
+    // Combinar ambos tipos siempre
+    let pool = [...cuotasNorm, ...extrasNorm];
 
     // Ordenar por periodo desc
     pool.sort((a, b) => (a.periodo > b.periodo ? -1 : a.periodo < b.periodo ? 1 : 0));
@@ -1956,6 +1961,15 @@ async function renderCuotas() {
     let list = pool.filter(item => {
       if (!_cuotaMatchesFiltro(item)) return false;
       if (clienteId && String(item.cliente_id) !== clienteId) return false;
+      if (_searchCuotas) {
+        const q = normalize(_searchCuotas);
+        const cli  = clienteMap.get(String(item.cliente_id));
+        const emb  = item.embarcacion_id ? embarcacionMap.get(String(item.embarcacion_id)) : null;
+        const hayConcepto    = normalize(item.concepto   || '').includes(q);
+        const hayCliente     = normalize(cli?.nombre     || '').includes(q);
+        const hayEmbarcacion = normalize(emb?.nombre     || '').includes(q);
+        if (!hayConcepto && !hayCliente && !hayEmbarcacion) return false;
+      }
       return true;
     });
 
@@ -2361,15 +2375,12 @@ document.getElementById('btnExportarCSV').addEventListener('click', async () => 
       ClientesService.getAll(),
     ]);
     const cliId     = document.getElementById('filtroClienteCuotas').value;
-    const tipoCuota = document.getElementById('filtroTipoCuota').value;
 
     const cuotasNorm = cuotas.map(c => ({ ...c, _tipo: 'mensualidad', periodo: c.periodo }));
     const extrasNorm = extras.map(p => ({
       ...p, _tipo: 'extra', periodo: p.fecha_pago ? p.fecha_pago.slice(0, 7) : '',
     }));
-    let pool = [];
-    if (tipoCuota !== 'extra')       pool = pool.concat(cuotasNorm);
-    if (tipoCuota !== 'mensualidad') pool = pool.concat(extrasNorm);
+    let pool = [...cuotasNorm, ...extrasNorm];
 
     const lista = pool.filter(item => {
       if (!_cuotaMatchesFiltro(item)) return false;
@@ -2691,3 +2702,35 @@ async function initAuth() {
 }
 
 initAuth();
+
+// ─── RECUPERACION DE CONTRASEÑA ───────────────────────────────────────────────
+
+db.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    document.getElementById('formLogin').hidden = true;
+    document.getElementById('formNuevaPassword').hidden = false;
+  }
+});
+
+async function actualizarPassword(nuevaPass) {
+  const errEl = document.getElementById('nuevaPasswordError');
+  const btn   = document.getElementById('btnActualizarPassword');
+  errEl.hidden = true;
+  setSubmitting(btn, true);
+  try {
+    const { error } = await db.auth.updateUser({ password: nuevaPass });
+    if (error) throw error;
+    alert('Contraseña actualizada con éxito.');
+    location.reload();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    setSubmitting(btn, false);
+  }
+}
+
+document.getElementById('formNuevaPassword').addEventListener('submit', e => {
+  e.preventDefault();
+  actualizarPassword(document.getElementById('nuevaPasswordInput').value);
+});

@@ -31,6 +31,14 @@
           <a href="#" id="linkForgotPassword" style="color:var(--accent)">&#191;Olvidaste tu clave?</a>
         </p>
       </form>
+      <form id="formNuevaPassword" hidden>
+        <div class="form-group">
+          <label>Nueva Contraseña</label>
+          <input type="password" id="nuevaPasswordInput" required placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <p class="login-error" id="nuevaPasswordError" hidden></p>
+        <button type="submit" class="btn btn-primary btn-full" id="btnActualizarPassword" style="margin-top:20px">Actualizar</button>
+      </form>
     </div>
   </div>
 
@@ -266,6 +274,10 @@
         </div>
         <div class="section-toolbar">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="search-wrap search-wrap-cli">
+              <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+              <input type="text" class="search-input" id="searchCuotas" placeholder="Buscar por concepto, cliente o embarcaci&#243;n..." />
+            </div>
             <select class="filter-select" id="filtroPresetCuotas">
               <option value="todo" selected>Ver Todo</option>
               <option value="mes">Este Mes</option>
@@ -280,11 +292,6 @@
               <label style="font-size:13px;color:var(--text-muted)">Hasta</label>
               <input type="date" id="filtroCustomHastaCuotas" />
             </div>
-            <select class="filter-select" id="filtroTipoCuota">
-              <option value="">Mensualidades e Ingresos</option>
-              <option value="mensualidad">Solo Mensualidades</option>
-              <option value="extra">Solo Ingresos Extra</option>
-            </select>
             <select class="filter-select" id="filtroClienteCuotas">
               <option value="">Todos los clientes</option>
             </select>
