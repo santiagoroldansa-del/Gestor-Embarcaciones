@@ -235,6 +235,17 @@ let _filtroEstadoCli = 'activos';
 let _searchClientes = '';
 // ID del cliente abierto en el modal de Cuenta Corriente (para notas)
 let _ccClienteId = null;
+let _c360Data    = null;
+
+// ─── ICONOS SVG (stroke, sin relleno) ────────────────────────────────────────
+const ICON = {
+  eye:     `<svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  edit:    `<svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 19.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/><path d="m15 5 3 3"/></svg>`,
+  trash:   `<svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`,
+  search:  `<svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
+  ledger:  `<svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>`,
+  refresh: `<svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`,
+};
 
 function _updatePaginControls(key, total) {
   const suffix = key === 'emb' ? 'Embarcaciones' : 'Clientes';
@@ -670,7 +681,7 @@ function _msRenderDropdown(search) {
     dropdown.innerHTML = filtered.map(c => {
       const sel = _msSelected.has(String(c.id));
       return `<div class="multiselect-option${sel ? ' selected' : ''}" data-id="${escHTML(String(c.id))}">
-        <span class="multiselect-check">${sel ? '✓' : ''}</span>${escHTML(c.nombre)}
+        <span class="multiselect-check">${sel ? '&#10003;' : ''}</span>${escHTML(c.nombre)}
       </div>`;
     }).join('');
     dropdown.querySelectorAll('.multiselect-option').forEach(opt => {
@@ -792,9 +803,9 @@ async function renderEmbarcaciones(filter = '') {
         <td>${escHTML(cat ? cat.nombre : '—')}</td>
         <td>${propCell}</td>
         <td>
-          <button class="btn-icon" onclick="verDetalleEmbarcacion('${escHTML(String(e.id))}')" title="Ver Detalles">&#128065;</button>
-          <button class="btn-icon" onclick="editEmbarcacion('${escHTML(String(e.id))}')" title="Editar">&#9998;</button>
-          <button class="btn-icon delete" onclick="removeEmbarcacion('${escHTML(String(e.id))}')" title="Eliminar">&#128465;</button>
+          <button class="btn-action-outline" onclick="verDetalleEmbarcacion('${escHTML(String(e.id))}')" title="Ver Detalles">${ICON.eye}</button>
+          <button class="btn-action-outline" onclick="editEmbarcacion('${escHTML(String(e.id))}')" title="Editar">${ICON.edit}</button>
+          <button class="btn-action-outline delete" onclick="removeEmbarcacion('${escHTML(String(e.id))}')" title="Eliminar">${ICON.trash}</button>
         </td>
       </tr>`;
     }).join('');
@@ -1119,12 +1130,14 @@ async function renderClientes() {
         : `<span class="badge badge-green">Activo</span>`;
 
       const acciones = enBaja
-        ? `<button class="btn-icon success" onclick="reactivarCliente('${cid}')" title="Reactivar">&#8635;</button>
-           <button class="btn-icon" onclick="verCuentaCorriente('${cid}')" title="Cuenta Corriente">&#128203;</button>
-           <button class="btn-icon" onclick="editCliente('${cid}')" title="Editar">&#9998;</button>`
-        : `<button class="btn-icon" onclick="verCuentaCorriente('${cid}')" title="Cuenta Corriente">&#128203;</button>
-           <button class="btn-icon" onclick="editCliente('${cid}')" title="Editar">&#9998;</button>
-           <button class="btn-icon delete" onclick="removeCliente('${cid}')" title="Dar de baja">&#128465;</button>`;
+        ? `<button class="btn-action-outline accent" onclick="verCliente360('${cid}')" title="Ver Perfil Completo">${ICON.search}</button>
+           <button class="btn-action-outline success" onclick="reactivarCliente('${cid}')" title="Reactivar">${ICON.refresh}</button>
+           <button class="btn-action-outline" onclick="verCuentaCorriente('${cid}')" title="Cuenta Corriente">${ICON.ledger}</button>
+           <button class="btn-action-outline" onclick="editCliente('${cid}')" title="Editar">${ICON.edit}</button>`
+        : `<button class="btn-action-outline accent" onclick="verCliente360('${cid}')" title="Ver Perfil Completo">${ICON.search}</button>
+           <button class="btn-action-outline" onclick="verCuentaCorriente('${cid}')" title="Cuenta Corriente">${ICON.ledger}</button>
+           <button class="btn-action-outline" onclick="editCliente('${cid}')" title="Editar">${ICON.edit}</button>
+           <button class="btn-action-outline delete" onclick="removeCliente('${cid}')" title="Dar de baja">${ICON.trash}</button>`;
 
       return `<tr class="cli-row-interactive ${rowClass}" ondblclick="verCliente360('${cid}')">
         <td><strong>${escHTML(c.nombre)}</strong></td>
@@ -1306,9 +1319,13 @@ async function verCliente360(clienteId) {
 
     // ── Saldo ─────────────────────────────────────────────
     const cuotasCliente = cuotas.filter(c => String(c.cliente_id) === String(clienteId));
-    const totalDebe  = cuotasCliente.reduce((s, c) => s + Number(c.monto), 0);
-    const totalHaber = pagos.reduce((s, p) => s + Number(p.monto), 0);
-    const saldo = totalDebe - totalHaber;
+    const saldo = cuotasCliente.reduce((sum, c) => {
+      if (c.estado === 'pendiente') return sum + Number(c.monto);
+      if (c.estado === 'parcial')   return sum + Math.max(0, Number(c.monto) - Number(c.monto_pagado ?? 0));
+      return sum;
+    }, 0);
+    const cuotasPendientes = cuotasCliente.filter(c => c.estado === 'pendiente' || c.estado === 'parcial');
+    _c360Data = { cliente, cuotasCliente, cuotasPendientes, saldo };
     const saldoEl = document.getElementById('c360Saldo');
     saldoEl.textContent = `$ ${formatMonto(saldo)}`;
     saldoEl.style.color = saldo > 0 ? 'var(--danger)' : '#15803d';
@@ -1325,7 +1342,7 @@ async function verCliente360(clienteId) {
             <strong>${escHTML(e.nombre)}</strong>
             <span class="c360-emb-mat">${escHTML(e.matricula) || '—'}</span>
           </div>
-          <button class="btn-icon" onclick="verDetalleEmbarcacion('${escHTML(String(e.id))}')" title="Ver ficha tecnica">&#128065;</button>
+          <button class="btn-action-outline" onclick="verDetalleEmbarcacion('${escHTML(String(e.id))}')" title="Ver ficha tecnica">${ICON.eye}</button>
         </div>`).join('');
     }
 
@@ -1368,15 +1385,115 @@ async function verCliente360(clienteId) {
         </div>`).join('');
     }
 
-    // ── Botón historial completo ───────────────────────────
+    // ── Botones de acción ─────────────────────────────────
     document.getElementById('c360BtnCC').onclick = () => {
       closeModal('modalCliente360');
       verCuentaCorriente(clienteId);
     };
+    document.getElementById('c360BtnWA').onclick = () => notificarWhatsApp();
 
   } catch (err) {
     showError('No se pudo cargar la ficha 360°: ' + err.message);
   }
+}
+
+// ─── PDF + WHATSAPP ───────────────────────────────────────────────────────────
+
+function generarPDFCuotasPendientes(cliente, cuotasPendientes, saldo) {
+  const { jsPDF } = window.jspdf;
+  const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  // Encabezado con fondo navy
+  doc.setFillColor(15, 39, 68);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18); doc.setFont('helvetica', 'bold');
+  doc.text('NaviGestor', 14, 12);
+  doc.setFontSize(9);  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema de Gestion de Embarcaciones', 14, 20);
+  doc.text(`Generado: ${fecha}`, 196, 12, { align: 'right' });
+
+  // Datos del cliente
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(13); doc.setFont('helvetica', 'bold');
+  doc.text('Estado de Cuenta \u2014 Cuotas Pendientes', 14, 38);
+  doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+  let infoY = 46;
+  doc.text(`Cliente: ${cliente.nombre || '\u2014'}`, 14, infoY);
+  if (cliente.dni)      { infoY += 6; doc.text(`DNI / CUIT: ${cliente.dni}`, 14, infoY); }
+  if (cliente.telefono) { infoY += 6; doc.text(`Tel\u00e9fono: ${cliente.telefono}`, 14, infoY); }
+
+  // Tabla de cuotas
+  const rows = cuotasPendientes.map(c => {
+    const resta = c.estado === 'pendiente'
+      ? Number(c.monto)
+      : Math.max(0, Number(c.monto) - Number(c.monto_pagado ?? 0));
+    return [
+      c.periodo  || '\u2014',
+      c.concepto || '\u2014',
+      `$ ${formatMonto(Number(c.monto))}`,
+      c.estado === 'pendiente' ? 'Pendiente' : 'Parcial',
+      `$ ${formatMonto(resta)}`,
+    ];
+  });
+
+  doc.autoTable({
+    startY: infoY + 8,
+    head:   [['Per\u00edodo', 'Concepto', 'Monto', 'Estado', 'Saldo a Pagar']],
+    body:   rows.length ? rows : [['', 'Sin cuotas pendientes', '', '', '$ 0,00']],
+    theme:  'striped',
+    headStyles:   { fillColor: [15, 39, 68], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+    bodyStyles:   { fontSize: 9, textColor: [30, 41, 59] },
+    columnStyles: {
+      2: { halign: 'right' },
+      4: { halign: 'right', fontStyle: 'bold', textColor: [239, 68, 68] },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // Saldo total
+  const finalY = doc.lastAutoTable.finalY + 6;
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, finalY, 196, finalY);
+  doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  doc.setTextColor(239, 68, 68);
+  doc.text(`Saldo Total Adeudado:  $ ${formatMonto(saldo)}`, 196, finalY + 8, { align: 'right' });
+
+  // Pie de página
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Este documento es informativo. Ante dudas com\u00fan\u00edquese con la administraci\u00f3n.', 105, 287, { align: 'center' });
+
+  const nombreArchivo = `Estado_Cuenta_${(cliente.nombre || 'cliente').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(nombreArchivo);
+}
+
+function notificarWhatsApp() {
+  if (!_c360Data) return;
+  const { cliente, cuotasPendientes, saldo } = _c360Data;
+
+  // 1. Generar y descargar el PDF
+  generarPDFCuotasPendientes(cliente, cuotasPendientes, saldo);
+
+  // 2. Abrir WhatsApp con mensaje dinámico
+  const nombre   = cliente.nombre || 'Cliente';
+  const telefono = (cliente.telefono || '').replace(/\D/g, '');
+  const n        = cuotasPendientes.length;
+  const montoStr = `$ ${formatMonto(saldo)}`;
+
+  const msg = [
+    `Estimado/a ${nombre},`,
+    '',
+    `Le informamos que registra *${n} cuota${n !== 1 ? 's' : ''} pendiente${n !== 1 ? 's' : ''}* con un saldo total de *${montoStr}*.`,
+    '',
+    'Quedamos a disposición por cualquier consulta.',
+    '',
+    '_NaviGestor \u2014 Sistema de Gesti\u00f3n N\u00e1utica_',
+  ].join('\n');
+
+  const url = `https://wa.me/${telefono}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
 }
 
 // ─── CUENTA CORRIENTE ─────────────────────────────────────────────────────────
@@ -1492,7 +1609,7 @@ async function _renderNotasCC(clienteId) {
       <div class="cc-nota-item">
         <div class="cc-nota-meta">
           <span class="cc-nota-fecha">${escHTML(n.fecha || n.created_at?.slice(0,10) || '')}</span>
-          <button class="btn-icon delete" style="font-size:11px;padding:2px 5px" onclick="_eliminarNotaCC('${escHTML(String(n.id))}')" title="Eliminar nota">&#128465;</button>
+          <button class="btn-action-outline delete" onclick="_eliminarNotaCC('${escHTML(String(n.id))}')" title="Eliminar nota">${ICON.trash}</button>
         </div>
         <div class="cc-nota-contenido">${escHTML(n.contenido)}</div>
       </div>
@@ -1603,8 +1720,8 @@ async function renderCategorias(filter = '') {
         <td>$ ${formatMonto(fondeadero)}</td>
         <td>${formatDate(c.created_at)}</td>
         <td>
-          <button class="btn-icon" onclick="editCategoria('${escHTML(String(c.id))}')" title="Editar">&#9998;</button>
-          <button class="btn-icon delete" onclick="removeCategoria('${escHTML(String(c.id))}')" title="Eliminar">&#128465;</button>
+          <button class="btn-action-outline" onclick="editCategoria('${escHTML(String(c.id))}')" title="Editar">${ICON.edit}</button>
+          <button class="btn-action-outline delete" onclick="removeCategoria('${escHTML(String(c.id))}')" title="Eliminar">${ICON.trash}</button>
         </td>
       </tr>`;
     }).join('');
@@ -1697,8 +1814,8 @@ async function renderMetodosPago() {
     tbody.innerHTML = metodos.map(m => `<tr>
       <td><strong>${escHTML(m.nombre)}</strong></td>
       <td>
-        <button class="btn-icon" onclick="editMetodoPago('${escHTML(String(m.id))}','${escHTML(m.nombre)}')" title="Editar">&#9998;</button>
-        <button class="btn-icon delete" onclick="removeMetodoPago('${escHTML(String(m.id))}')" title="Eliminar">&#128465;</button>
+        <button class="btn-action-outline" onclick="editMetodoPago('${escHTML(String(m.id))}','${escHTML(m.nombre)}')" title="Editar">${ICON.edit}</button>
+        <button class="btn-action-outline delete" onclick="removeMetodoPago('${escHTML(String(m.id))}')" title="Eliminar">${ICON.trash}</button>
       </td>
     </tr>`).join('');
   } catch (err) {
@@ -1867,7 +1984,7 @@ async function renderCuotas() {
           <td><span class="badge badge-green">Cobrado</span></td>
           <td>
             <div style="display:flex;align-items:center;gap:4px">
-              <button class="btn-icon delete" onclick="eliminarExtra('${cid}')" title="Eliminar">&#128465;</button>
+              <button class="btn-action-outline delete" onclick="eliminarExtra('${cid}')" title="Eliminar">${ICON.trash}</button>
             </div>
           </td>
         </tr>`;
@@ -1909,8 +2026,8 @@ async function renderCuotas() {
         <td>
           <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
             ${btnPrincipal}
-            <button class="btn-icon" onclick="editarCuota('${cid}')" title="Editar">&#9998;</button>
-            <button class="btn-icon delete" onclick="eliminarCuota('${cid}')" title="Eliminar">&#128465;</button>
+            <button class="btn-action-outline" onclick="editarCuota('${cid}')" title="Editar">${ICON.edit}</button>
+            <button class="btn-action-outline delete" onclick="eliminarCuota('${cid}')" title="Eliminar">${ICON.trash}</button>
           </div>
         </td>
       </tr>`;

@@ -12,7 +12,7 @@
   <div class="login-screen" id="loginScreen">
     <div class="login-card">
       <div class="login-logo-area">
-        <span class="login-logo">&#9875;</span>
+        <span class="login-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="22"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg></span>
         <h1>NaviGestor</h1>
         <p>Sistema de Gestion de Embarcaciones</p>
       </div>
@@ -84,7 +84,7 @@
           </div>
           <div class="section-toolbar">
             <div class="search-wrap">
-              <span class="search-icon">&#128269;</span>
+              <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
               <input type="text" class="search-input" id="searchEmbarcaciones" placeholder="Nombre, matr&#237;cula, marca, modelo, motoriz., titular..." />
             </div>
             <div style="display:flex;gap:8px">
@@ -127,7 +127,7 @@
           <div class="section-toolbar">
             <div class="clientes-select-bar">
               <div class="search-wrap search-wrap-cli">
-                <span class="search-icon">&#128269;</span>
+                <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
                 <input type="text" class="search-input" id="searchClientes" placeholder="Nombre, DNI, CUIT o ID..." />
               </div>
               <select class="filter-select" id="sortClienteNombre">
@@ -195,7 +195,7 @@
             </div>
             <div class="section-toolbar" style="margin-bottom:12px">
               <div class="search-wrap">
-                <span class="search-icon">&#128269;</span>
+                <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
                 <input type="text" class="search-input" id="searchCategorias" placeholder="Buscar categor&#237;a..." />
               </div>
             </div>
@@ -414,7 +414,7 @@
         <!-- Proyeccion del Mes -->
         <div class="proyeccion-card">
           <div class="proyeccion-header">
-            <span class="proyeccion-title">&#127919; Proyeccion del Mes</span>
+            <span class="proyeccion-title">Proyeccion del Mes</span>
             <span class="proyeccion-periodo" id="proyeccionPeriodo"></span>
           </div>
           <div class="proyeccion-body">
@@ -685,7 +685,7 @@
       <div class="modal-header no-print">
         <h3 id="ccClienteNombre">Cuenta Corriente</h3>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="btn btn-secondary" id="btnImprimirCC" style="font-size:12px;padding:6px 12px">&#128438; Imprimir / PDF</button>
+          <button class="btn btn-secondary" id="btnImprimirCC" style="font-size:12px;padding:6px 12px">Imprimir / PDF</button>
           <button class="modal-close" data-modal="modalCuentaCorriente">&times;</button>
         </div>
       </div>
@@ -728,7 +728,7 @@
       <!-- ── Notas del cliente ──────────────────────────────────────────── -->
       <div class="cc-notas-section no-print">
         <div class="cc-notas-header">
-          <span class="cc-notas-title">&#128221; Notas</span>
+          <span class="cc-notas-title">Notas</span>
           <button type="button" class="btn btn-secondary" id="btnToggleNota" style="font-size:12px;padding:5px 12px">+ Agregar nota</button>
         </div>
         <div id="ccNotasList"></div>
@@ -991,20 +991,20 @@
 
           <!-- Embarcaciones -->
           <div class="c360-card">
-            <div class="c360-card-title">&#9875; Embarcaciones</div>
+            <div class="c360-card-title">Embarcaciones</div>
             <div id="c360Embarcaciones"><p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p></div>
           </div>
 
           <!-- Movimientos recientes -->
           <div class="c360-card">
-            <div class="c360-card-title">&#128203; Ultimos Movimientos</div>
+            <div class="c360-card-title">Ultimos Movimientos</div>
             <div id="c360Movimientos"><p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p></div>
             <button type="button" class="btn btn-secondary c360-link-btn" id="c360BtnCC">Ver historial completo &rarr;</button>
           </div>
 
           <!-- Notas -->
           <div class="c360-card c360-card-full">
-            <div class="c360-card-title">&#128221; Notas</div>
+            <div class="c360-card-title">Notas</div>
             <div id="c360Notas"><p class="c360-empty"><span class="spinner-sm"></span> Cargando...</p></div>
           </div>
 
@@ -1012,6 +1012,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-modal="modalCliente360">Cerrar</button>
+        <button type="button" class="btn btn-wa" id="c360BtnWA"><svg class="wa-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9z"/><path d="M9 10a.5.5 0 0 0 1 0v-1a.5.5 0 0 0-1 0v1a5 5 0 0 0 5 5h1a.5.5 0 0 0 0-1h-1a.5.5 0 0 0 0 1"/></svg> Notificar por WhatsApp</button>
       </div>
     </div>
   </div>
@@ -1153,21 +1154,21 @@
           <h3 class="config-section-title">Cambiar Clave</h3>
         </div>
         <div class="config-password-warning">
-          &#9888; Cambiar la clave cerrara tu sesion en todos los dispositivos.
+          Cambiar la clave cerrara tu sesion en todos los dispositivos.
         </div>
         <div class="form-row">
           <div class="form-group">
             <label>Nueva Clave</label>
             <div class="password-field">
               <input type="password" id="configPassword" placeholder="Dejar vacio para no cambiar" autocomplete="new-password" />
-              <button type="button" class="btn-eye" id="btnEyePassword" title="Mostrar/ocultar">&#128065;</button>
+              <button type="button" class="btn-eye" id="btnEyePassword" title="Mostrar/ocultar"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
             </div>
           </div>
           <div class="form-group">
             <label>Confirmar Clave</label>
             <div class="password-field">
               <input type="password" id="configPasswordConfirm" placeholder="Repetir clave" autocomplete="new-password" />
-              <button type="button" class="btn-eye" id="btnEyePasswordConfirm" title="Mostrar/ocultar">&#128065;</button>
+              <button type="button" class="btn-eye" id="btnEyePasswordConfirm" title="Mostrar/ocultar"<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
             </div>
           </div>
         </div>
@@ -1190,6 +1191,8 @@
   <!-- ═══ SCRIPTS ═══════════════════════════════════════════════════════════ -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="js/data.js"></script>
   <script src="js/services.js"></script>
   <script src="js/app.js"></script>

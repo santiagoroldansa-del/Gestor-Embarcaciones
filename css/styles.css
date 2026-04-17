@@ -569,12 +569,13 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 15px;
   color: var(--text-muted);
   padding: 2px 4px;
-  line-height: 1;
+  display: flex;
+  align-items: center;
   transition: color .15s;
 }
+.btn-eye svg { width: 16px; height: 16px; pointer-events: none; }
 .btn-eye:hover { color: var(--text); }
 
 /* ── CONFIG DIVIDER & WARNINGS ─────────────────────────────── */
@@ -618,11 +619,12 @@ body {
   left: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 14px;
   color: var(--text-muted);
   pointer-events: none;
-  line-height: 1;
+  display: flex;
+  align-items: center;
 }
+.search-icon svg { width: 14px; height: 14px; }
 .search-wrap-cli {
   min-width: 200px;
   flex: 0 1 200px;
@@ -1001,20 +1003,36 @@ body {
 .btn-steel { background: #4682B4; color: #fff;    box-shadow: 0 2px 8px rgba(70,130,180,.35); }
 .btn-steel:hover { background: #3a6d96; box-shadow: 0 4px 14px rgba(70,130,180,.5); }
 
-.btn-icon {
-  padding: 6px 9px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  background: none;
-  border: 1.5px solid var(--border);
-  cursor: pointer;
+.btn-action-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-muted);
-  transition: var(--transition);
-  line-height: 1;
-  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background .13s, color .13s, border-color .13s;
 }
-.btn-icon:hover { background: var(--surface-2); color: var(--text); border-color: #cbd5e1; }
-.btn-icon.delete:hover { background: #fee2e2; color: var(--danger); border-color: #fca5a5; }
+.btn-action-outline:hover {
+  background: rgba(15,39,68,.05);
+  color: var(--text);
+  border-color: rgba(0,0,0,.07);
+}
+.btn-action-outline.delete:hover {
+  background: rgba(239,68,68,.06);
+  color: var(--danger);
+  border-color: transparent;
+}
+.btn-action-outline.success { color: var(--success); }
+.btn-action-outline.success:hover { background: rgba(16,185,129,.07); border-color: transparent; }
+.btn-action-outline.accent  { color: var(--accent); }
+.btn-action-outline.accent:hover  { background: rgba(37,99,235,.06); color: var(--accent-dark); border-color: transparent; }
+.btn-svg { width: 14px; height: 14px; display: block; pointer-events: none; flex-shrink: 0; }
 
 /* ─── MODALS ──────────────────────────────────────────────── */
 .modal-overlay {
@@ -1145,11 +1163,13 @@ body {
   margin-bottom: 34px;
 }
 .login-logo {
-  display: block;
-  font-size: 52px;
+  display: flex;
+  justify-content: center;
   margin-bottom: 12px;
+  color: var(--accent);
   filter: drop-shadow(0 0 12px rgba(37,99,235,.5));
 }
+.login-logo svg { width: 52px; height: 52px; }
 .login-logo-area h1 {
   font-size: 23px;
   font-weight: 800;
@@ -1394,6 +1414,12 @@ body {
   background: transparent;
 }
 .btn-icon.success:hover { background: #dcfce7; }
+.btn-icon.accent {
+  color: var(--accent);
+  border-color: transparent;
+  background: transparent;
+}
+.btn-icon.accent:hover { background: #eff6ff; color: var(--accent-dark); }
 
 /* ─── NOTAS EN CUENTA CORRIENTE ──────────────────────────────── */
 .cc-notas-section {
@@ -1568,11 +1594,9 @@ body {
 }
 .c360-card-full { grid-column: 1 / -1; }
 .c360-card-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  color: var(--text-muted);
+  color: var(--navy);
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
@@ -1611,6 +1635,16 @@ body {
 .c360-mov-fecha { font-size: 11px; color: var(--text-muted); }
 .c360-mov-monto { font-weight: 700; font-size: 13px; white-space: nowrap; }
 .c360-link-btn { font-size: 12px; margin-top: auto; }
+
+/* Botón WhatsApp — outline, sin relleno sólido */
+.btn-wa {
+  background: transparent;
+  color: #16a34a;
+  border: 1.5px solid #22c55e;
+}
+.btn-wa:hover  { background: rgba(34,197,94,.05); border-color: #16a34a; }
+.btn-wa:active { background: rgba(34,197,94,.08); }
+.wa-icon { width: 15px; height: 15px; flex-shrink: 0; }
 
 /* Notas */
 .c360-nota-row {
