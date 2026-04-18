@@ -37,7 +37,7 @@
           <input type="password" id="nuevaPasswordInput" required placeholder="••••••••" autocomplete="new-password" />
         </div>
         <p class="login-error" id="nuevaPasswordError" hidden></p>
-        <button type="submit" class="btn btn-primary btn-full" id="btnActualizarPassword" style="margin-top:20px">Actualizar</button>
+        <button type="submit" class="btn btn-primary btn-full" id="btnActualizarPassword" style="margin-top:20px">Confirmar Nueva Clave</button>
       </form>
     </div>
   </div>
@@ -58,6 +58,10 @@
         <button class="tab-btn active" data-tab="inicio" role="tab" aria-selected="true">Inicio</button>
         <button class="tab-btn" data-tab="facturacion" role="tab" aria-selected="false">Facturacion</button>
         <button class="tab-btn" data-tab="reportes" role="tab" aria-selected="false">Reportes</button>
+        <button class="tab-btn" data-tab="prefectura" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 2a3 3 0 0 0-3 3v1H5a2 2 0 0 0-2 2v1h18V8a2 2 0 0 0-2-2h-4V5a3 3 0 0 0-3-3z"/><path d="M12 9v13"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
+          Prefectura
+        </button>
       </div>
 
       <!-- Guarderia + Logout -->
@@ -95,8 +99,29 @@
               <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
               <input type="text" class="search-input" id="searchEmbarcaciones" placeholder="Nombre, matr&#237;cula, marca, modelo, motoriz., titular..." />
             </div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-secondary" id="btnExportarEmbarcacionesCSV">&#8659; Exportar CSV</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <select class="filter-select" id="filtroEstadoEmb">
+                <option value="todos">Todos los clientes</option>
+                <option value="activo">Clientes Activos</option>
+                <option value="baja">Clientes de Baja</option>
+              </select>
+              <div class="dropdown-wrap" id="exportEmbDropdownWrap">
+                <button class="btn btn-secondary dropdown-toggle" id="btnExportEmbDropdown">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Exportar
+                </button>
+                <div class="dropdown-menu" id="exportEmbDropdownMenu">
+                  <button class="dropdown-item" id="btnExportarEmbarcacionesCSV">
+                    <span>Exportar CSV</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item dropdown-item-add" id="btnExportarEmbarcacionesExcel">
+                    <span>Exportar Excel Pro</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8l5 8 5-8"/></svg>
+                  </button>
+                </div>
+              </div>
               <button class="btn btn-primary" id="btnNuevaEmbarcacion">+ Nueva Embarcacion</button>
             </div>
           </div>
@@ -160,7 +185,23 @@
               </div>
             </div>
             <div style="display:flex;gap:8px">
-              <button class="btn btn-secondary" id="btnExportarClientesCSV">&#8659; Exportar CSV</button>
+              <div class="dropdown-wrap" id="exportCliDropdownWrap">
+                <button class="btn btn-secondary dropdown-toggle" id="btnExportCliDropdown">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Exportar
+                </button>
+                <div class="dropdown-menu" id="exportCliDropdownMenu">
+                  <button class="dropdown-item" id="btnExportarClientesCSV">
+                    <span>Exportar CSV</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item dropdown-item-add" id="btnExportarClientesExcel">
+                    <span>Exportar Excel Pro</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8l5 8 5-8"/></svg>
+                  </button>
+                </div>
+              </div>
               <button class="btn btn-primary" id="btnNuevoCliente">+ Nuevo Cliente</button>
             </div>
           </div>
@@ -191,6 +232,59 @@
 
         <!-- ══ SUB-PANEL: MAESTROS ═════════════════════════════════════════════ -->
         <div class="sub-tab-panel" id="subtab-maestros" role="tabpanel">
+
+        <!-- ── IMPORTACIÓN MASIVA (visible al entrar) ─────────────────────── -->
+        <div style="margin-bottom:28px;padding-bottom:24px;border-bottom:1.5px solid var(--border)">
+          <div class="panel-header" style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              <div>
+                <h2 class="panel-title">Importaci&#243;n Masiva</h2>
+                <p class="panel-sub">Carg&#225; Clientes o Embarcaciones desde Excel (.xlsx) o CSV (.csv)</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="padding:22px">
+            <div id="importDropzone" style="border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;background:var(--bg);transition:border-color .2s,background .2s;cursor:pointer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="38" height="38" style="opacity:.65"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              <p style="margin:10px 0 8px;font-size:14px;color:var(--text)">Arrastr&#225; tu archivo aqu&#237; o</p>
+              <label class="btn btn-secondary" for="importFileInput" style="cursor:pointer;display:inline-flex">Elegir archivo</label>
+              <input type="file" id="importFileInput" accept=".xlsx,.csv" style="display:none" />
+              <p id="importFileName" style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Sin archivo seleccionado</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="btnProcesarImportacion" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Procesar Archivo
+              </button>
+              <p style="font-size:12px;color:var(--text-muted);margin:0">
+                <strong>Clientes:</strong> columnas Nombre&#43;DNI &nbsp;&#183;&nbsp; <strong>Embarcaciones:</strong> columnas Nombre&#43;Matr&#237;cula
+              </p>
+            </div>
+          </div>
+
+          <!-- Vista previa (oculta hasta procesar) -->
+          <div id="importPreviewSection" hidden style="margin-top:20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+              <div>
+                <h3 id="importPreviewTitle" style="font-size:15px;font-weight:700;margin:0">Vista previa</h3>
+                <p id="importPreviewStats" style="font-size:13px;color:var(--text-muted);margin:3px 0 0"></p>
+              </div>
+              <button class="btn btn-primary" id="btnConfirmarImportacion">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+                Confirmar Importaci&#243;n
+              </button>
+            </div>
+            <div class="card" style="overflow-x:auto">
+              <table class="table">
+                <thead id="importPreviewHead"></thead>
+                <tbody id="importPreviewBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div><!-- /.importacion-masiva -->
+
         <div class="two-col-grid">
 
           <!-- Columna izquierda: Categorias -->
@@ -255,6 +349,7 @@
           </div>
 
         </div><!-- /.two-col-grid -->
+
         </div><!-- /#subtab-maestros -->
 
       </div>
@@ -270,7 +365,7 @@
         </div>
         <div class="filter-label-block">
           <p class="filter-title-label"><strong>Filtros</strong></p>
-          <p class="filter-hint">Periodo, tipo y cliente para acotar los resultados.</p>
+          <p class="filter-hint">Periodo y cliente para acotar los resultados.</p>
         </div>
         <div class="section-toolbar">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -298,7 +393,23 @@
             <button class="btn btn-filter" id="btnFiltrarCuotas">Aplicar</button>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn btn-secondary" id="btnExportarCSV">&#8659; Exportar CSV</button>
+            <div class="dropdown-wrap" id="exportDropdownWrap">
+              <button class="btn btn-secondary dropdown-toggle" id="btnExportDropdown">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Exportar
+              </button>
+              <div class="dropdown-menu" id="exportDropdownMenu">
+                <button class="dropdown-item" id="btnExportarCSV">
+                  <span>Exportar CSV</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </button>
+                <div class="dropdown-divider"></div>
+                <button class="dropdown-item dropdown-item-add" id="btnExportarExcel">
+                  <span>Exportar Excel Pro</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8l5 8 5-8"/></svg>
+                </button>
+              </div>
+            </div>
             <button class="btn btn-sky" id="btnIngresoExtra">+ Venta de Servicios/Otros</button>
             <button class="btn btn-steel" id="btnGenerarMensualidades">+ Ingresos</button>
           </div>
@@ -475,6 +586,65 @@
         </div>
       </div>
 
+
+      <!-- ══ PESTAÑA: PREFECTURA ══════════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-prefectura" role="tabpanel">
+
+        <div class="panel-header">
+          <div style="display:flex;align-items:center;gap:10px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><path d="M12 2a3 3 0 0 0-3 3v1H5a2 2 0 0 0-2 2v1h18V8a2 2 0 0 0-2-2h-4V5a3 3 0 0 0-3-3z"/><path d="M12 9v13"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
+            <div>
+              <h2 class="panel-title">Prefectura / REGINAVE</h2>
+              <p class="panel-sub">Planillas oficiales para la Prefectura Naval Argentina</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-label-block">
+          <p class="filter-title-label"><strong>Rango de Movimientos</strong></p>
+          <p class="filter-hint">Filtra por fecha de alta en el sistema. Sin fechas, incluye todas las embarcaciones.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+          <label style="font-size:13px;color:var(--text-muted)">Desde</label>
+          <input type="date" id="pnaDesde" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--surface);color:var(--text)" />
+          <label style="font-size:13px;color:var(--text-muted)">Hasta</label>
+          <input type="date" id="pnaHasta" style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--surface);color:var(--text)" />
+          <button class="btn btn-secondary" id="btnCargarPNA">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            Actualizar vista
+          </button>
+          <button class="btn btn-primary" id="btnExportarPNA" style="margin-left:auto;gap:6px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Generar Planilla PNA (Excel)
+          </button>
+        </div>
+
+        <!-- Alertas de validaci&#243;n -->
+        <div id="pnaAlertas" style="margin-bottom:14px"></div>
+
+        <!-- Vista previa -->
+        <div class="card" style="overflow-x:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Embarcaci&#243;n</th>
+                <th>Matr&#237;cula</th>
+                <th>Eslora</th>
+                <th>Manga</th>
+                <th>Titular</th>
+                <th>DNI / RUC</th>
+                <th>Fecha Mov.</th>
+                <th>Movimiento</th>
+                <th style="min-width:160px">Observaciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaPNA">
+              <tr><td colspan="9" class="empty-row">Seleccion&#225; un rango y presion&#225; <em>Actualizar vista</em>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div><!-- /#tab-prefectura -->
 
     </div><!-- /.tab-content -->
   </div><!-- /.app-shell -->
@@ -1200,6 +1370,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="js/data.js"></script>
   <script src="js/services.js"></script>
   <script src="js/app.js"></script>

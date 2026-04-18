@@ -14,7 +14,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 /**
  * Cambia la pestaña activa y carga los datos correspondientes.
- * @param {string} tabId  'inicio' | 'facturacion' | 'reportes'
+ * @param {string} tabId  'inicio' | 'facturacion' | 'reportes' | 'prefectura'
  */
 async function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach(b => {
@@ -29,6 +29,7 @@ async function switchTab(tabId) {
   if (tabId === 'inicio')      await _loadSubTab(_activeSubTab);
   if (tabId === 'facturacion') await Promise.all([renderCuotas(), renderUltimosMovimientos()]);
   if (tabId === 'reportes')    await renderDashboard();
+  if (tabId === 'prefectura')  await renderPrefectura();
 }
 
 // ─── SUB-NAVEGACIÓN (dentro de Inicio) ───────────────────────────────────────
@@ -70,6 +71,9 @@ function openModal(id) {
 }
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
+  // Si el usuario cierra sin guardar, descarta el callback del importador
+  if (id === 'modalCliente')    _importPostClienteGuardado   = null;
+  if (id === 'modalCategoria')  _importPostCategoriaGuardada = null;
 }
 
 document.querySelectorAll('.modal-close, [data-modal]').forEach(btn => {
@@ -231,6 +235,8 @@ const _pag = { emb: 0, cli: 0 };
 
 // Filtro de estado: 'activos' | 'todos' | 'bajas'
 let _filtroEstadoCli = 'activos';
+// Filtro de estado de titular para Embarcaciones: 'todos' | 'activo' | 'baja'
+let _filtroEstadoEmb = 'todos';
 // Texto del buscador de clientes
 let _searchClientes = '';
 let _searchCuotas   = '';
@@ -760,6 +766,16 @@ async function renderEmbarcaciones(filter = '') {
     });
 
     let list = embarcaciones;
+
+    // Filtro por estado del titular
+    if (_filtroEstadoEmb !== 'todos') {
+      const estadoTarget = _filtroEstadoEmb === 'activo' ? 'Activo' : 'Baja';
+      list = list.filter(e => {
+        const titular = e.propietario_id ? clienteMap.get(String(e.propietario_id)) : null;
+        return (titular?.estado ?? 'Activo') === estadoTarget;
+      });
+    }
+
     if (filter) {
       const f = normalize(filter);
       list = list.filter(e => {
@@ -779,7 +795,7 @@ async function renderEmbarcaciones(filter = '') {
     if (list.length === 0) {
       const msg = filter
         ? `No se encontraron coincidencias para <strong>&laquo;${escHTML(filter)}&raquo;</strong>`
-        : 'Sin embarcaciones registradas';
+        : 'Sin embarcaciones para los filtros seleccionados';
       tbody.innerHTML = `<tr><td colspan="6" class="empty-row">${msg}</td></tr>`;
       return;
     }
@@ -823,6 +839,12 @@ document.getElementById('searchEmbarcaciones').addEventListener('input', debounc
   _pag.emb = 0;
   renderEmbarcaciones(e.target.value);
 }, 300));
+
+document.getElementById('filtroEstadoEmb').addEventListener('change', e => {
+  _filtroEstadoEmb = e.target.value;
+  _pag.emb = 0;
+  renderEmbarcaciones(document.getElementById('searchEmbarcaciones').value);
+});
 
 document.getElementById('prevEmbarcaciones').addEventListener('click', () => {
   if (_pag.emb > 0) { _pag.emb--; renderEmbarcaciones(document.getElementById('searchEmbarcaciones').value); }
@@ -1688,7 +1710,13 @@ document.getElementById('formCliente').addEventListener('submit', async e => {
       estado:    document.getElementById('cliEstado').value,
     };
     if (idVal) data.id = idVal;
-    await ClientesService.save(data);
+    const clienteGuardado = await ClientesService.save(data);
+    // Si el modal fue abierto desde el importador, re-valida la fila correspondiente
+    if (_importPostClienteGuardado) {
+      const cb = _importPostClienteGuardado;
+      _importPostClienteGuardado = null;
+      cb(clienteGuardado);
+    }
     closeModal('modalCliente');
     await Promise.all([renderClientes(), renderDashboard()]);
   } catch (err) {
@@ -1797,7 +1825,12 @@ document.getElementById('formCategoria').addEventListener('submit', async e => {
       tasa_fondeadero:     parseFloat(document.getElementById('catFondeadero').value) || 0,
     };
     if (idVal) data.id = idVal;
-    await CategoriasService.save(data);
+    const catGuardada = await CategoriasService.save(data);
+    if (_importPostCategoriaGuardada) {
+      const cb = _importPostCategoriaGuardada;
+      _importPostCategoriaGuardada = null;
+      cb(catGuardada);
+    }
     closeModal('modalCategoria');
     await renderCategorias();
   } catch (err) {
@@ -2284,155 +2317,326 @@ function _descargarCSV(headers, rows, filename) {
   URL.revokeObjectURL(url);
 }
 
-/** Exporta la lista de cuotas (filtrada por periodo si está activo). */
-function exportarCSV(cuotas, clientes) {
+// ─── EXPORT FACTURACIÓN ───────────────────────────────────────────────────────
+
+async function _buildExportPool() {
+  const [cuotas, extras, clientes, embarcaciones] = await Promise.all([
+    CuotasService.getAll(),
+    PagosService.getExtras(),
+    ClientesService.getAll(),
+    EmbarcacionesService.getAll(),
+  ]);
   const cliMap = new Map(clientes.map(c => [String(c.id), c]));
-  const rows   = cuotas.map(c => {
-    const cli     = cliMap.get(String(c.cliente_id));
-    const periodo = c._tipo === 'extra'
-      ? (c.fecha_pago ? c.fecha_pago.slice(0, 10) : c.periodo ?? '')
-      : (c.periodo ?? '');
-    const estado  = c._tipo === 'extra' ? 'Cobrado' : (c.estado ?? '');
-    const tipo    = c._tipo === 'extra' ? 'Ingreso Extra' : 'Mensualidad';
-    return [periodo, tipo, c.concepto ?? '', cli?.nombre ?? '', cli?.dni ?? '', c.monto ?? 0, estado];
+  const embMap = new Map(embarcaciones.map(e => [String(e.id), e]));
+  const cliId  = document.getElementById('filtroClienteCuotas').value;
+
+  const cuotasNorm = cuotas.map(c => ({ ...c, _tipo: 'mensualidad', periodo: c.periodo }));
+  const extrasNorm = extras.map(p => ({
+    ...p, _tipo: 'extra', periodo: p.fecha_pago ? p.fecha_pago.slice(0, 7) : '',
+  }));
+
+  let pool = [...cuotasNorm, ...extrasNorm].filter(item => {
+    if (!_cuotaMatchesFiltro(item)) return false;
+    if (cliId && String(item.cliente_id) !== cliId) return false;
+    if (_searchCuotas) {
+      const q   = normalize(_searchCuotas);
+      const cli = cliMap.get(String(item.cliente_id));
+      const emb = item.embarcacion_id ? embMap.get(String(item.embarcacion_id)) : null;
+      if (!normalize(item.concepto || '').includes(q) &&
+          !normalize(cli?.nombre   || '').includes(q) &&
+          !normalize(emb?.nombre   || '').includes(q)) return false;
+    }
+    return true;
   });
-
-  // Nombre de archivo dinámico según el preset activo
-  const sufijosNombre = {
-    todo:   'todos',
-    mes:    'este_mes',
-    '3m':   '3_meses',
-    '6m':   '6_meses',
-    ano:    'ultimo_año',
-  };
-  const r      = _getRangoActivo();
-  const sufijo = _filtroFecha.preset !== 'custom'
-    ? (sufijosNombre[_filtroFecha.preset] || 'filtrado')
-    : `${r.desde || 'inicio'}_a_${r.hasta || 'fin'}`;
-  const filename = `reporte_facturacion_${sufijo}.csv`;
-
-  // Toast confirmatorio
-  const etiqueta = _etiquetaRango();
-  showToast(`Exportando ${rows.length} registro${rows.length !== 1 ? 's' : ''} — Filtro: ${etiqueta}`, 'success');
-
-  _descargarCSV(
-    ['Periodo', 'Tipo', 'Concepto', 'Cliente', 'DNI/RUC', 'Monto', 'Estado'],
-    rows,
-    filename
-  );
+  pool.sort((a, b) => (a.periodo > b.periodo ? -1 : a.periodo < b.periodo ? 1 : 0));
+  return { pool, cliMap };
 }
 
-/** Exporta la lista de clientes con su saldo pendiente calculado. */
-function exportarClientesCSV(clientes, cuotas) {
+function _exportFilename(ext) {
+  const s = { todo: 'todos', mes: 'este_mes', '3m': '3_meses', '6m': '6_meses', ano: 'ultimo_año' };
+  const r = _getRangoActivo();
+  const sufijo = _filtroFecha.preset !== 'custom'
+    ? (s[_filtroFecha.preset] || 'filtrado')
+    : `${r.desde || 'inicio'}_a_${r.hasta || 'fin'}`;
+  return `reporte_facturacion_${sufijo}.${ext}`;
+}
+
+const EXPORT_HEADERS = ['Periodo', 'Tipo', 'Concepto', 'Cliente', 'DNI/RUC', 'Monto', 'Estado'];
+
+function _poolToObjects(pool, cliMap) {
+  return pool.map(item => {
+    const cli = cliMap.get(String(item.cliente_id));
+    return {
+      Periodo:  item._tipo === 'extra' ? (item.fecha_pago ? item.fecha_pago.slice(0, 10) : item.periodo ?? '') : (item.periodo ?? ''),
+      Tipo:     item._tipo === 'extra' ? 'Ingreso Extra' : 'Mensualidad',
+      Concepto: item.concepto ?? '',
+      Cliente:  cli?.nombre ?? '',
+      'DNI/RUC': cli?.dni  ?? '',
+      Monto:    Number(item.monto ?? 0),
+      Estado:   item._tipo === 'extra' ? 'Cobrado' : (item.estado ?? ''),
+    };
+  });
+}
+
+function exportarCSV(pool, cliMap) {
+  const data = _poolToObjects(pool, cliMap);
+  const csv  = Papa.unparse(data, { header: true, columns: EXPORT_HEADERS });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: _exportFilename('csv') });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`CSV exportado — ${data.length} registro${data.length !== 1 ? 's' : ''} (${_etiquetaRango()})`, 'success');
+}
+
+async function exportarExcelPro(pool, cliMap) {
+  const data = _poolToObjects(pool, cliMap);
+  const wb   = new ExcelJS.Workbook();
+  const ws   = wb.addWorksheet('Facturación');
+
+  ws.columns = EXPORT_HEADERS.map(h => ({
+    header: h,
+    key:    h,
+    width:  Math.min(Math.max(h.length, ...data.map(r => String(r[h] ?? '').length)) + 4, 42),
+  }));
+
+  ws.getRow(1).eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border    = { bottom: { style: 'thin', color: { argb: 'FF2563EB' } } };
+  });
+
+  data.forEach(r => {
+    const row       = ws.addRow(EXPORT_HEADERS.map(h => r[h]));
+    const montoCell = row.getCell(6);
+    montoCell.numFmt    = '"$"#,##0.00';
+    montoCell.alignment = { horizontal: 'right' };
+  });
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url    = URL.createObjectURL(blob);
+  const a      = Object.assign(document.createElement('a'), { href: url, download: _exportFilename('xlsx') });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Excel exportado — ${data.length} registro${data.length !== 1 ? 's' : ''} (${_etiquetaRango()})`, 'success');
+}
+
+// ─── EXPORT GENÉRICO (Clientes / Embarcaciones) ───────────────────────────────
+
+/** Recibe array de objetos planos; exporta CSV via PapaParse. */
+function exportarDataCSV(data, nombreArchivo) {
+  const csv  = Papa.unparse(data, { header: true });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: nombreArchivo + '.csv' });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`CSV exportado — ${data.length} registro${data.length !== 1 ? 's' : ''}`, 'success');
+}
+
+/** Recibe array de objetos planos; exporta Excel con encabezados gris-azulado y anchos automáticos. */
+async function exportarDataExcel(data, nombreArchivo) {
+  if (!data.length) return;
+  const headers = Object.keys(data[0]);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(nombreArchivo);
+
+  ws.columns = headers.map(h => ({
+    header: h,
+    key:    h,
+    width:  Math.min(Math.max(h.length, ...data.map(r => String(r[h] ?? '').length)) + 4, 42),
+  }));
+
+  ws.getRow(1).eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FF1E3A5F' } };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border    = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
+  });
+
+  data.forEach(r => ws.addRow(headers.map(h => r[h])));
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url    = URL.createObjectURL(blob);
+  const a      = Object.assign(document.createElement('a'), { href: url, download: nombreArchivo + '.xlsx' });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Excel exportado — ${data.length} registro${data.length !== 1 ? 's' : ''}`, 'success');
+}
+
+// ─── BUILDERS DE POOL FILTRADO ────────────────────────────────────────────────
+
+async function _buildClientesPool() {
+  const [clientes, cuotas] = await Promise.all([ClientesService.getAll(), CuotasService.getAll()]);
   const saldoMap = new Map();
   cuotas.forEach(c => {
     const cid = String(c.cliente_id);
-    if (c.estado === 'pendiente') {
-      saldoMap.set(cid, (saldoMap.get(cid) || 0) + Number(c.monto));
-    } else if (c.estado === 'parcial') {
-      const resta = Math.max(0, Number(c.monto) - Number(c.monto_pagado ?? 0));
-      saldoMap.set(cid, (saldoMap.get(cid) || 0) + resta);
-    }
+    if (c.estado === 'pendiente') saldoMap.set(cid, (saldoMap.get(cid) || 0) + Number(c.monto));
+    else if (c.estado === 'parcial') saldoMap.set(cid, (saldoMap.get(cid) || 0) + Math.max(0, Number(c.monto) - Number(c.monto_pagado ?? 0)));
   });
-  const rows = clientes.map(c => [
-    c.nombre ?? '', c.dni ?? '', c.telefono ?? '', c.email ?? '',
-    c.direccion ?? '', saldoMap.get(String(c.id)) ?? 0,
-  ]);
-  _descargarCSV(
-    ['Nombre', 'DNI/RUC', 'Telefono', 'Email', 'Direccion', 'Saldo Pendiente'],
-    rows,
-    `clientes_${new Date().toISOString().slice(0, 10)}.csv`
-  );
-}
 
-/** Exporta la lista de embarcaciones con categoría y propietario resueltos. */
-function exportarEmbarcacionesCSV(embarcaciones, clientes, categorias) {
-  const cliMap = new Map(clientes.map(c  => [String(c.id), c]));
-  const catMap = new Map(categorias.map(c => [String(c.id), c]));
-  const rows   = embarcaciones.map(e => {
-    const propId = e.propietario_id ?? e.propietarioId;
-    const cli    = propId ? cliMap.get(String(propId)) : null;
-    const cat    = e.categoria_id ? catMap.get(String(e.categoria_id)) : null;
-    return [
-      e.nombre ?? '', e.matricula ?? '', cat?.nombre ?? '',
-      cli?.nombre ?? '', e.eslora ?? '', e.notas ?? '',
-    ];
-  });
-  _descargarCSV(
-    ['Nombre', 'Matricula', 'Categoria', 'Estado', 'Propietario', 'Eslora (m)', 'Notas'],
-    rows,
-    `embarcaciones_${new Date().toISOString().slice(0, 10)}.csv`
-  );
-}
+  let pool;
+  if (_filtroEstadoCli === 'bajas')   pool = clientes.filter(c => (c.estado || 'Activo') === 'Baja');
+  else if (_filtroEstadoCli === 'activos') pool = clientes.filter(c => (c.estado || 'Activo') === 'Activo');
+  else pool = [...clientes];
 
-document.getElementById('btnExportarCSV').addEventListener('click', async () => {
-  const btn = document.getElementById('btnExportarCSV');
-  setSubmitting(btn, true);
-  try {
-    const [cuotas, extras, clientes] = await Promise.all([
-      CuotasService.getAll(),
-      PagosService.getExtras(),
-      ClientesService.getAll(),
-    ]);
-    const cliId     = document.getElementById('filtroClienteCuotas').value;
+  const estadoFil  = document.getElementById('filtroEstadoCliente').value;
+  const sortNombre = document.getElementById('sortClienteNombre').value;
+  const sortDeuda  = document.getElementById('sortClienteDeuda').value;
 
-    const cuotasNorm = cuotas.map(c => ({ ...c, _tipo: 'mensualidad', periodo: c.periodo }));
-    const extrasNorm = extras.map(p => ({
-      ...p, _tipo: 'extra', periodo: p.fecha_pago ? p.fecha_pago.slice(0, 7) : '',
-    }));
-    let pool = [...cuotasNorm, ...extrasNorm];
-
-    const lista = pool.filter(item => {
-      if (!_cuotaMatchesFiltro(item)) return false;
-      if (cliId && String(item.cliente_id) !== cliId) return false;
+  if (_filtroEstadoCli !== 'bajas') {
+    pool = pool.filter(c => {
+      const s = saldoMap.get(String(c.id)) || 0;
+      if (estadoFil === 'aldia'  && s > 0)  return false;
+      if (estadoFil === 'deudor' && s <= 0) return false;
       return true;
     });
-    if (lista.length === 0) {
-      showError('No hay registros para exportar con el filtro actual.');
-      return;
-    }
-    exportarCSV(lista, clientes);
+  }
+
+  if      (sortDeuda  === 'mayor') pool.sort((a, b) => (saldoMap.get(String(b.id)) || 0) - (saldoMap.get(String(a.id)) || 0));
+  else if (sortDeuda  === 'menor') pool.sort((a, b) => (saldoMap.get(String(a.id)) || 0) - (saldoMap.get(String(b.id)) || 0));
+  else if (sortNombre === 'az')    pool.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  else if (sortNombre === 'za')    pool.sort((a, b) => (b.nombre || '').localeCompare(a.nombre || '', 'es'));
+
+  if (_searchClientes) {
+    const f = normalize(_searchClientes);
+    pool = pool.filter(c => normalize(c.nombre).includes(f) || normalize(c.dni).includes(f) || normalize(String(c.id)).includes(f));
+  }
+
+  return pool.map(c => ({
+    Nombre:            c.nombre    ?? '',
+    'DNI/RUC':         c.dni       ?? '',
+    Telefono:          c.telefono  ?? '',
+    Email:             c.email     ?? '',
+    Direccion:         c.direccion ?? '',
+    Estado:            c.estado    ?? 'Activo',
+    'Saldo Pendiente': saldoMap.get(String(c.id)) ?? 0,
+  }));
+}
+
+async function _buildEmbarcacionesPool() {
+  const [embarcaciones, clientes, categorias] = await Promise.all([
+    EmbarcacionesService.getAll(),
+    ClientesService.getAll(),
+    CategoriasService.getAll(),
+  ]);
+  const clienteMap   = new Map(clientes.map(c   => [String(c.id), c]));
+  const categoriaMap = new Map(categorias.map(c => [String(c.id), c]));
+
+  const filter = document.getElementById('searchEmbarcaciones').value;
+  let list = embarcaciones;
+
+  if (_filtroEstadoEmb !== 'todos') {
+    const estadoTarget = _filtroEstadoEmb === 'activo' ? 'Activo' : 'Baja';
+    list = list.filter(e => {
+      const titular = e.propietario_id ? clienteMap.get(String(e.propietario_id)) : null;
+      return (titular?.estado ?? 'Activo') === estadoTarget;
+    });
+  }
+
+  if (filter) {
+    const f = normalize(filter);
+    list = list.filter(e => {
+      const cat     = e.categoria_id   ? categoriaMap.get(String(e.categoria_id))   : null;
+      const titular = e.propietario_id ? clienteMap.get(String(e.propietario_id))   : null;
+      return normalize(e.nombre).includes(f)       || normalize(e.matricula).includes(f)    ||
+             normalize(e.marca).includes(f)        || normalize(e.modelo).includes(f)       ||
+             normalize(e.motorizacion).includes(f) || normalize(cat?.nombre).includes(f)    ||
+             normalize(titular?.nombre).includes(f);
+    });
+  }
+
+  return list.map(e => {
+    const propId  = e.propietario_id ?? e.propietarioId;
+    const titular = propId ? clienteMap.get(String(propId)) : null;
+    const cat     = e.categoria_id ? categoriaMap.get(String(e.categoria_id)) : null;
+    return {
+      Nombre:       e.nombre      ?? '',
+      Matricula:    e.matricula   ?? '',
+      Categoria:    cat?.nombre   ?? '—',
+      Titular:      titular?.nombre ?? '—',
+      'Eslora (m)': e.eslora      ?? '',
+      Motorizacion: e.motorizacion ?? '',
+      Notas:        e.notas       ?? '',
+    };
+  });
+}
+
+// ─── DROPDOWN EXPORTAR ────────────────────────────────────────────────────────
+
+document.getElementById('btnExportDropdown').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('exportDropdownMenu').classList.toggle('open');
+});
+
+// Cierra todos los dropdowns de exportación al hacer click fuera
+document.addEventListener('click', () => {
+  ['exportDropdownMenu', 'exportCliDropdownMenu', 'exportEmbDropdownMenu']
+    .forEach(id => document.getElementById(id)?.classList.remove('open'));
+});
+
+// ── Runner genérico: toggle del dropdown, llama al builder y a la función de export
+async function _runEntityExport({ toggleId, menuId, dataFn, formato, filename }) {
+  const toggle = document.getElementById(toggleId);
+  document.getElementById(menuId)?.classList.remove('open');
+  setSubmitting(toggle, true);
+  try {
+    const data = await dataFn();
+    if (!data.length) { showError('Sin registros para exportar con el filtro actual.'); return; }
+    if (formato === 'csv') exportarDataCSV(data, filename);
+    else                   await exportarDataExcel(data, filename);
   } catch (err) {
     showError('No se pudo exportar: ' + err.message);
   } finally {
-    setSubmitting(btn, false);
+    setSubmitting(toggle, false);
   }
-});
+}
 
-document.getElementById('btnExportarClientesCSV').addEventListener('click', async () => {
-  const btn = document.getElementById('btnExportarClientesCSV');
-  setSubmitting(btn, true);
+// ── Runner Facturación (usa su propio builder y funciones de formato)
+async function _runExport(exportFn) {
+  const toggle = document.getElementById('btnExportDropdown');
+  document.getElementById('exportDropdownMenu').classList.remove('open');
+  setSubmitting(toggle, true);
   try {
-    const [clientes, cuotas] = await Promise.all([
-      ClientesService.getAll(),
-      CuotasService.getAll(),
-    ]);
-    if (clientes.length === 0) { showError('No hay clientes para exportar.'); return; }
-    exportarClientesCSV(clientes, cuotas);
+    const { pool, cliMap } = await _buildExportPool();
+    if (pool.length === 0) { showError('Sin registros para exportar con el filtro actual.'); return; }
+    await exportFn(pool, cliMap);
   } catch (err) {
-    showError('No se pudo exportar clientes: ' + err.message);
+    showError('No se pudo exportar: ' + err.message);
   } finally {
-    setSubmitting(btn, false);
+    setSubmitting(toggle, false);
   }
-});
+}
 
-document.getElementById('btnExportarEmbarcacionesCSV').addEventListener('click', async () => {
-  const btn = document.getElementById('btnExportarEmbarcacionesCSV');
-  setSubmitting(btn, true);
-  try {
-    const [embarcaciones, clientes, categorias] = await Promise.all([
-      EmbarcacionesService.getAll(),
-      ClientesService.getAll(),
-      CategoriasService.getAll(),
-    ]);
-    if (embarcaciones.length === 0) { showError('No hay embarcaciones para exportar.'); return; }
-    exportarEmbarcacionesCSV(embarcaciones, clientes, categorias);
-  } catch (err) {
-    showError('No se pudo exportar embarcaciones: ' + err.message);
-  } finally {
-    setSubmitting(btn, false);
-  }
+document.getElementById('btnExportarCSV').addEventListener('click', () => _runExport(exportarCSV));
+document.getElementById('btnExportarExcel').addEventListener('click', () => _runExport(exportarExcelPro));
+
+// ── Dropdown Clientes
+document.getElementById('btnExportCliDropdown').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('exportCliDropdownMenu').classList.toggle('open');
 });
+document.getElementById('btnExportarClientesCSV').addEventListener('click', () =>
+  _runEntityExport({ toggleId: 'btnExportCliDropdown', menuId: 'exportCliDropdownMenu', dataFn: _buildClientesPool, formato: 'csv', filename: 'Listado_Clientes_2026' })
+);
+document.getElementById('btnExportarClientesExcel').addEventListener('click', () =>
+  _runEntityExport({ toggleId: 'btnExportCliDropdown', menuId: 'exportCliDropdownMenu', dataFn: _buildClientesPool, formato: 'excel', filename: 'Listado_Clientes_2026' })
+);
+
+// ── Dropdown Embarcaciones
+document.getElementById('btnExportEmbDropdown').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('exportEmbDropdownMenu').classList.toggle('open');
+});
+document.getElementById('btnExportarEmbarcacionesCSV').addEventListener('click', () =>
+  _runEntityExport({ toggleId: 'btnExportEmbDropdown', menuId: 'exportEmbDropdownMenu', dataFn: _buildEmbarcacionesPool, formato: 'csv', filename: 'Listado_Embarcaciones_2026' })
+);
+document.getElementById('btnExportarEmbarcacionesExcel').addEventListener('click', () =>
+  _runEntityExport({ toggleId: 'btnExportEmbDropdown', menuId: 'exportEmbDropdownMenu', dataFn: _buildEmbarcacionesPool, formato: 'excel', filename: 'Listado_Embarcaciones_2026' })
+);
 
 // ─── GENERAR MENSUALIDADES ────────────────────────────────────────────────────
 
@@ -2712,13 +2916,13 @@ db.auth.onAuthStateChange((event) => {
   }
 });
 
-async function actualizarPassword(nuevaPass) {
+async function confirmarNuevaClave(nuevaPassword) {
   const errEl = document.getElementById('nuevaPasswordError');
   const btn   = document.getElementById('btnActualizarPassword');
   errEl.hidden = true;
   setSubmitting(btn, true);
   try {
-    const { error } = await db.auth.updateUser({ password: nuevaPass });
+    const { error } = await db.auth.updateUser({ password: nuevaPassword });
     if (error) throw error;
     alert('Contraseña actualizada con éxito.');
     location.reload();
@@ -2732,5 +2936,920 @@ async function actualizarPassword(nuevaPass) {
 
 document.getElementById('formNuevaPassword').addEventListener('submit', e => {
   e.preventDefault();
-  actualizarPassword(document.getElementById('nuevaPasswordInput').value);
+  confirmarNuevaClave(document.getElementById('nuevaPasswordInput').value);
 });
+
+// ─── PREFECTURA / REGINAVE ────────────────────────────────────────────────────
+
+let _pnaData = []; // filas actuales del preview; el exportador las lee directo
+
+async function renderPrefectura() {
+  const tbody = document.getElementById('tablaPNA');
+  const desde = document.getElementById('pnaDesde').value;
+  const hasta = document.getElementById('pnaHasta').value;
+
+  document.getElementById('pnaAlertas').innerHTML = '';
+  _pnaData = [];
+
+  // Sin rango → no hay "movimiento" que mostrar; evita listar barcos fantasma
+  if (!desde && !hasta) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-row">Seleccioná al menos una fecha para filtrar movimientos.</td></tr>';
+    return;
+  }
+
+  setTableLoading(tbody, 9);
+
+  // True solo si la fecha (string YYYY-MM-DD o ISO) cae dentro del rango activo
+  const enRango = (fecha) => {
+    if (!fecha) return false;
+    const d = String(fecha).slice(0, 10);
+    return (!desde || d >= desde) && (!hasta || d <= hasta);
+  };
+
+  try {
+    const [embarcaciones, clientes] = await Promise.all([
+      EmbarcacionesService.getAll(),
+      ClientesService.getAll(),
+    ]);
+    const clienteMap = new Map(clientes.map(c => [String(c.id), c]));
+
+    // FILTRO ESTRICTO: solo aparece si tuvo un movimiento (alta o baja) en el rango
+    const list = embarcaciones.filter(e =>
+      enRango(e.created_at) || enRango(e.fecha_baja)
+    );
+
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-row">Sin movimientos en el rango seleccionado.</td></tr>';
+      return;
+    }
+
+    _pnaData = list.map(e => {
+      const propId = e.propietario_id ?? e.cliente_id;
+      const cli    = propId ? clienteMap.get(String(propId)) : null;
+
+      // BAJA si fecha_baja cae en el rango; ALTA si solo created_at está en rango
+      const esBaja          = enRango(e.fecha_baja);
+      const tipoMovimiento  = esBaja ? 'BAJA' : 'ALTA';
+      const fechaMovimiento = esBaja
+        ? String(e.fecha_baja).slice(0, 10)
+        : String(e.created_at ?? '').slice(0, 10);
+
+      return {
+        id:                 e.id,
+        Embarcacion:        e.nombre    ?? '',
+        Matricula:          e.matricula ?? '',
+        'Eslora (m)':       e.eslora    != null ? String(e.eslora) : '',
+        'Manga (m)':        e.manga     != null ? String(e.manga)  : '',
+        Titular:            cli?.nombre ?? '—',
+        'DNI/RUC':          cli?.dni    ?? '',
+        'Fecha Movimiento': fechaMovimiento,
+        Movimiento:         tipoMovimiento,
+        Observaciones:      '',
+        _sinMatricula:      !e.matricula?.trim(),
+        _sinDni:            !cli?.dni?.trim(),
+        _esBaja:            esBaja,
+      };
+    });
+
+    const nMat = _pnaData.filter(r => r._sinMatricula).length;
+    const nDni = _pnaData.filter(r => r._sinDni).length;
+    _renderPnaAlertas(nMat, nDni);
+
+    const WARN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
+    tbody.innerHTML = _pnaData.map((row, i) => {
+      const movBadge = row._esBaja
+        ? '<span class="badge badge-red">BAJA</span>'
+        : '<span class="badge badge-green">ALTA</span>';
+
+      // Filas de BAJA: fondo rojo suave + texto ligeramente oscurecido
+      // Filas con campos faltantes: fondo amarillo (solo si no es BAJA)
+      const rowStyle = row._esBaja
+        ? 'style="background:rgba(239,68,68,.06)"'
+        : (row._sinMatricula || row._sinDni) ? 'style="background:rgba(251,191,36,.07)"' : '';
+
+      const inputStyle = `width:100%;padding:4px 8px;border:1.5px solid ${row._esBaja ? 'rgba(239,68,68,.35)' : 'var(--border)'};border-radius:6px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text)`;
+
+      return `<tr ${rowStyle}>
+        <td><strong style="${row._esBaja ? 'color:#b91c1c' : ''}">${escHTML(row.Embarcacion)}</strong></td>
+        <td>${row._sinMatricula ? WARN_SVG + ' ' : ''}${row.Matricula ? escHTML(row.Matricula) : '<em style="color:var(--text-muted)">—</em>'}</td>
+        <td>${escHTML(row['Eslora (m)']) || '—'}</td>
+        <td>${escHTML(row['Manga (m)']) || '—'}</td>
+        <td>${escHTML(row.Titular)}</td>
+        <td>${row._sinDni ? WARN_SVG + ' ' : ''}${row['DNI/RUC'] ? escHTML(row['DNI/RUC']) : '<em style="color:var(--text-muted)">—</em>'}</td>
+        <td>${escHTML(row['Fecha Movimiento'])}</td>
+        <td>${movBadge}</td>
+        <td><input type="text" class="pna-obs-input" data-idx="${i}" placeholder="Sin observaciones" style="${inputStyle}" /></td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('.pna-obs-input').forEach(input => {
+      input.addEventListener('input', ev => {
+        _pnaData[Number(ev.target.dataset.idx)].Observaciones = ev.target.value;
+      });
+    });
+
+  } catch (err) {
+    setTableError(tbody, 9);
+    showError('No se pudo cargar la vista previa: ' + err.message);
+  }
+}
+
+function _renderPnaAlertas(nMat, nDni) {
+  const el = document.getElementById('pnaAlertas');
+  const partes = [];
+  if (nMat > 0) partes.push(`<strong>${nMat}</strong> embarcación${nMat !== 1 ? 'es' : ''} sin matrícula`);
+  if (nDni > 0) partes.push(`<strong>${nDni}</strong> titular${nDni !== 1 ? 'es' : ''} sin DNI/RUC`);
+  if (!partes.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:10px 14px;font-size:13px;color:#92400e">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="flex-shrink:0">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <span>Atenci&#243;n: ${partes.join(' · ')}. La planilla podr&#237;a ser observada por la autoridad marítima.</span>
+    </div>`;
+}
+
+async function exportarPlanillaPNA() {
+  if (!_pnaData.length) {
+    showError('Primero cargue la vista previa antes de exportar.');
+    return;
+  }
+
+  // Captura el estado final de los inputs de Observaciones antes de exportar
+  document.querySelectorAll('.pna-obs-input').forEach(input => {
+    _pnaData[Number(input.dataset.idx)].Observaciones = input.value;
+  });
+
+  const COLS = ['Embarcacion', 'Matricula', 'Eslora (m)', 'Manga (m)', 'Titular', 'DNI/RUC', 'Fecha Movimiento', 'Movimiento', 'Observaciones'];
+  const hoy  = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Planilla PNA');
+
+  // Fila 1: título mergeado
+  ws.addRow([`MOVIMIENTO DE EMBARCACIONES - NAVIGESTOR - ${hoy}`]);
+  ws.mergeCells(1, 1, 1, COLS.length);
+  const tCell = ws.getCell('A1');
+  tCell.font      = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+  tCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
+  tCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(1).height = 28;
+
+  // Fila 2: encabezados estilo Pro (gris-azulado)
+  ws.addRow(COLS);
+  ws.getRow(2).eachCell(cell => {
+    cell.font      = { bold: true, color: { argb: 'FF1E3A5F' } };
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border    = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
+  });
+
+  // Anchos automáticos (calculados sobre datos + header)
+  ws.columns = COLS.map(h => ({
+    width: Math.min(Math.max(h.length, ..._pnaData.map(r => String(r[h] ?? '').length)) + 4, 44),
+  }));
+
+  // Filas de datos
+  _pnaData.forEach(row => {
+    const dataRow = ws.addRow(COLS.map(h => row[h] ?? ''));
+    if (row._sinMatricula || row._sinDni) {
+      dataRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+      });
+    }
+  });
+
+  const desde   = document.getElementById('pnaDesde').value || 'todo';
+  const hasta   = document.getElementById('pnaHasta').value || 'todo';
+  const buffer  = await wb.xlsx.writeBuffer();
+  const blob    = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url     = URL.createObjectURL(blob);
+  const a       = Object.assign(document.createElement('a'), { href: url, download: `Planilla_PNA_${desde}_${hasta}.xlsx` });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`Planilla PNA exportada — ${_pnaData.length} embarcación${_pnaData.length !== 1 ? 'es' : ''}`, 'success');
+}
+
+document.getElementById('btnCargarPNA').addEventListener('click', renderPrefectura);
+document.getElementById('btnExportarPNA').addEventListener('click', async () => {
+  const btn = document.getElementById('btnExportarPNA');
+  setSubmitting(btn, true);
+  try   { await exportarPlanillaPNA(); }
+  catch (err) { showError('No se pudo exportar: ' + err.message); }
+  finally { setSubmitting(btn, false); }
+});
+
+// ─── IMPORTACIÓN MASIVA ────────────────────────────────────────────────────────
+
+let _importRows                = [];
+let _importEntity              = null; // 'clientes' | 'embarcaciones'
+let _importPostClienteGuardado  = null; // callback para re-validar fila tras crear cliente desde importador
+let _importPostCategoriaGuardada = null; // callback para actualizar filas tras crear categoría desde importador
+
+/** Lee el archivo y devuelve array de objetos planos (una fila = un objeto). */
+// Keywords that identify a header row in an Excel sheet
+const _HEADER_KEYWORDS = /nombre|dni|ruc|matricula|eslora|manga|email|telefono|propietario|titular|categor|tipo|clase/i;
+
+/** Picks a sheet interactively when the workbook has multiple sheets. */
+function _elegirHoja(wb) {
+  return new Promise(resolve => {
+    const sheets = wb.worksheets.map(ws => ws.name);
+    if (sheets.length === 1) { resolve(wb.worksheets[0]); return; }
+
+    // Build inline picker inside the import section
+    const container = document.getElementById('importFileName');
+    const prev = container.innerHTML;
+    container.innerHTML =
+      `<span style="color:#374151;font-weight:600">Seleccioná una hoja:</span> ` +
+      sheets.map((name, i) =>
+        `<button onclick="this.closest('#importFileName')._resolve(${i})"
+                 style="margin:0 4px;padding:2px 10px;border:1px solid #3B82F6;border-radius:6px;
+                        background:#EFF6FF;color:#1D4ED8;cursor:pointer;font-size:.85rem">${escHTML(name)}</button>`
+      ).join('') +
+      `<span id="sheetPickerHint" style="color:#6B7280;font-size:.8rem;margin-left:8px">
+        (el archivo tiene ${sheets.length} hojas)</span>`;
+    container._resolve = idx => {
+      container.innerHTML = prev;
+      resolve(wb.worksheets[idx]);
+    };
+  });
+}
+
+/** Scans rows top-down and returns the first row index (1-based) whose cells
+ *  contain known header keywords, or 1 as a fallback. */
+function _detectarFilaHeaders(ws) {
+  let headerRow = 1;
+  ws.eachRow((row, idx) => {
+    if (headerRow !== 1) return; // already found
+    if (idx > 20) return;        // give up after 20 rows
+    const text = row.values.map(v => String(v ?? '')).join(' ');
+    if (_HEADER_KEYWORDS.test(text)) headerRow = idx;
+  });
+  return headerRow;
+}
+
+async function _parsearArchivo(file) {
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    // Auto-detect delimiter (PapaParse uses '' to trigger its own detection)
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        delimiter: '',   // '' = auto-detect (handles ; | \t , etc.)
+        complete: r => resolve(r.data),
+        error:    e => reject(new Error(e.message)),
+      });
+    });
+  }
+
+  // XLSX via ExcelJS
+  const buffer = await file.arrayBuffer();
+  const wb     = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+
+  // Multi-sheet selection
+  const ws = await _elegirHoja(wb);
+
+  // Header row detection
+  const headerRowIdx = _detectarFilaHeaders(ws);
+  const headers = [];
+  const data    = [];
+
+  ws.eachRow((row, idx) => {
+    if (idx < headerRowIdx) return; // skip rows above headers
+    if (idx === headerRowIdx) {
+      row.eachCell({ includeEmpty: true }, cell =>
+        headers.push(String(cell.value ?? '').trim())
+      );
+      return;
+    }
+    const obj = {};
+    row.eachCell({ includeEmpty: true }, (cell, col) => {
+      const h = headers[col - 1];
+      if (h) obj[h] = String(cell.text ?? cell.value ?? '').trim();
+    });
+    if (Object.values(obj).some(v => v !== '' && v != null)) data.push(obj);
+  });
+  return data;
+}
+
+/**
+ * Detecta la entidad (clientes / embarcaciones) por los headers del archivo
+ * y normaliza cada fila al esquema que usan los servicios.
+ */
+function _mapearColumnas(rawRows) {
+  if (!rawRows.length) return { entity: 'clientes', mappedRows: [] };
+
+  // Normalización de encabezados: sin tildes, minúsculas, sin chars especiales
+  const _normKey = s => String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\/\-\.\(\)_&,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Patrones de detección por campo (orden importa: más específico primero)
+  const PAT = {
+    propietario: /propietario|dueno|owner|titular|nombre.*apellido|apellido.*nombre|apellido/,
+    matricula:   /matricula|reginave|sigla|nro.*reg|num.*reg|registro/,
+    // DNI: solo palabras clave inequívocas — nunca "año", "hp", etc.
+    dni:         /\bdni\b|\bcuit\b|\bcuil\b|\bdoc\b|documento|\bruc\b/,
+    // Campos que NUNCA son DNI aunque coincidan con el patrón
+    _excluirDni: /\bano\b|año|construc|\bhp\b|potencia|\bkw\b|calado|motor|eslora|manga|largo|ancho|peso|\bid\b|marca|modelo|hidrau|serie|loa/,
+    nombre:      /nombre.*emb|nombre.*lancha|nombre.*barco|nombre.*veh|vehiculo|embarcacion|barco|boat/,
+    eslora:      /eslora|largo|length/,
+    manga:       /manga|beam|ancho/,
+    telefono:    /telefono|celular|phone|movil|\btel\b|\bcel\b/,
+    email:       /email|correo|mail/,
+    contacto:    /\bcontacto\b|\bcontact\b/,
+    direccion:   /direccion|domicilio|address|calle/,
+    localidad:   /localidad|ciudad|pueblo|partido|provincia/,
+    notas:       /notas|notes|observacion|comentario/,
+    categoria:   /categor|tipo.*emb|clase.*emb|tipo.*barco|\btipo\b|\bclase\b/,
+  };
+
+  /**
+   * Valida por contenido que una columna realmente contiene DNIs/CUITs.
+   * Muestrea hasta 30 filas: si ≥80 % tienen entre 7 y 11 dígitos → es DNI.
+   * "Año" tiene 4 dígitos → falla. "HP" tiene 1-3 → falla. DNI 7-8 → pasa. CUIT 11 → pasa.
+   */
+  const _validarContenidoDni = (colName) => {
+    const muestra = rawRows.slice(0, 30)
+      .map(r => String(r[colName] ?? '').replace(/[.\-\s]/g, ''))
+      .filter(v => v.length > 0);
+    if (!muestra.length) return false;
+    const validos = muestra.filter(v => /^\d{7,11}$/.test(v));
+    return validos.length / muestra.length >= 0.8;
+  };
+
+  // Pre-computa qué columnas son realmente DNI (header + contenido)
+  const dniCols = new Set(
+    Object.keys(rawRows[0]).filter(col => {
+      const key = _normKey(col);
+      return PAT.dni.test(key) && !PAT._excluirDni.test(key) && _validarContenidoDni(col);
+    })
+  );
+
+  const headersNorm = Object.keys(rawRows[0]).map(h => _normKey(h));
+  const entity = headersNorm.some(h => PAT.matricula.test(h) || PAT.eslora.test(h) || PAT.manga.test(h))
+    ? 'embarcaciones'
+    : 'clientes';
+
+  const mappedRows = rawRows.map(raw => {
+    const r = {};
+    Object.entries(raw).forEach(([k, v]) => {
+      const key = _normKey(k);
+      const val = String(v ?? '').trim();
+
+      // DNI — solo columnas pre-validadas por header Y contenido
+      if (dniCols.has(k))                                 { r.dni         = val.replace(/[.\-\s]/g, ''); return; }
+      // Propietario — antes que nombre genérico
+      if (PAT.propietario.test(key))                      { r.propietario = val; return; }
+      // Matrícula — antes que nombre genérico
+      if (PAT.matricula.test(key))                        { r.matricula   = val; return; }
+      // Nombre de embarcación (patrones específicos)
+      if (PAT.nombre.test(key))                           { r.nombre      = val; return; }
+      // Nombre genérico: no sobreescribe si ya fue asignado por un patrón específico
+      if (/\bnombre\b/.test(key))                         { r.nombre      = r.nombre || val; return; }
+
+      // Resto de campos
+      if (PAT.eslora.test(key))    r.eslora    = Number(v) || '';
+      if (PAT.manga.test(key))     r.manga     = Number(v) || '';
+      if (PAT.telefono.test(key))  r.telefono  = val;
+      if (PAT.email.test(key))     r.email     = val;
+      if (PAT.contacto.test(key))  r.contacto  = val;
+      if (PAT.direccion.test(key)) r.direccion = val;
+      if (PAT.localidad.test(key)) r.localidad = val;
+      if (PAT.notas.test(key))     r.notas     = val;
+      if (PAT.categoria.test(key)) r.categoria = val;
+    });
+    return r;
+  });
+
+  return { entity, mappedRows };
+}
+
+/** Devuelve array de strings con los errores de validación de la fila. */
+function _validarFilaImport(row, entity) {
+  const err = [];
+  if (!row.nombre?.trim())                                     err.push('Nombre vacío');
+  if (entity === 'clientes'      && !row.dni?.trim())          err.push('DNI vacío');
+  if (entity === 'embarcaciones' && !row.matricula?.trim())    err.push('Matrícula vacía');
+  return err;
+}
+
+// ── Helpers de resolución para importación ──────────────────────────────────
+
+/** Normaliza para comparación: sin tildes, minúsculas, espacios colapsados. */
+function _normImport(s) {
+  return String(s ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Coeficiente de Sørensen-Dice sobre bigramas — mucho más preciso que solapamiento de chars. */
+function _diceSim(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const bigrams = s => {
+    const set = new Set();
+    for (let i = 0; i < s.length - 1; i++) set.add(s[i] + s[i + 1]);
+    return set;
+  };
+  const ba = bigrams(a), bb = bigrams(b);
+  if (!ba.size || !bb.size) return 0;
+  let inter = 0;
+  for (const bg of ba) if (bb.has(bg)) inter++;
+  return (2 * inter) / (ba.size + bb.size);
+}
+
+/**
+ * Busca la categoría más parecida al nombre dado.
+ * Orden: exacta → contiene (mín. 4 chars) → Dice ≥ 80 %.
+ * Si ningún nivel supera el umbral, devuelve null (badge naranja).
+ */
+function _fuzzyCategoria(nombre, categorias) {
+  if (!nombre || !categorias.length) return null;
+  const n = _normImport(nombre);
+
+  // 1. Exacta
+  let match = categorias.find(c => _normImport(c.nombre) === n);
+  if (match) return match;
+
+  // 2. Contiene en cualquier dirección (solo si la cadena corta tiene ≥ 4 chars)
+  match = categorias.find(c => {
+    const cn = _normImport(c.nombre);
+    const shorter = n.length <= cn.length ? n : cn;
+    if (shorter.length < 4) return false;
+    return cn.includes(n) || n.includes(cn);
+  });
+  if (match) return match;
+
+  // 3. Dice sobre bigramas con umbral estricto del 80 %
+  let best = null, bestScore = 0;
+  for (const c of categorias) {
+    const score = _diceSim(n, _normImport(c.nombre));
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  return bestScore >= 0.8 ? best : null;
+}
+
+/**
+ * Re-evalúa el estado de validación de una fila concreta tras resolver propietario/categoría.
+ * Solo actualiza _errores y _accion; no toca los datos ni los flags de resolución.
+ */
+function revalidarFila(idx) {
+  const row = _importRows[idx];
+  if (!row) return;
+  row._errores = _validarFilaImport(row, _importEntity);
+  if (row._errores.length) {
+    row._accion = 'error';
+  } else if (row._accion === 'error') {
+    // Fue un error que ya se resolvió → vuelve a su estado natural
+    row._accion = row._duplicado ? 'actualizar' : 'nuevo';
+  }
+  // Si ya era 'nuevo', 'actualizar' u 'omitir', lo conserva
+}
+
+/**
+ * Abre el modal de Nuevo Cliente pre-cargado con los datos de la fila del importador.
+ * Al guardar, re-valida la fila y actualiza el badge sin reprocesar el archivo.
+ */
+/**
+ * Analiza un campo "Contacto" libre y extrae email y/o teléfono.
+ * Soporta valores mixtos como "juan@mail.com / 11-223344".
+ * Retorna { email, telefono } con los valores encontrados (string vacío si no aplica).
+ */
+function _clasificarContacto(valor) {
+  const resultado = { email: '', telefono: '' };
+  if (!valor) return resultado;
+
+  // Parte por separadores comunes entre email y teléfono en la misma celda
+  const partes = String(valor).split(/[\s\/|,;]+/).map(p => p.trim()).filter(Boolean);
+
+  for (const parte of partes) {
+    if (parte.includes('@')) {
+      // Es un email
+      if (!resultado.email) resultado.email = parte.toLowerCase();
+    } else if (/^[\d\+\-\s\(\)\.]{6,}$/.test(parte)) {
+      // Es un teléfono: solo dígitos, +, -, espacios, paréntesis, puntos — mínimo 6 chars
+      if (!resultado.telefono) resultado.telefono = parte.trim();
+    }
+  }
+
+  return resultado;
+}
+
+/** Convierte "JUAN PABLO pérez" → "Juan Pablo Pérez" */
+function _titleCase(s) {
+  return String(s ?? '').trim()
+    .toLowerCase()
+    .replace(/(?:^|\s)\S/g, ch => ch.toUpperCase());
+}
+
+function _importCrearCliente(idx) {
+  const row = _importRows[idx];
+  if (!row) return;
+
+  // Normalización al vuelo
+  const nombre = _titleCase(row.propietario ?? '');
+  const dni    = String(row.dni ?? '').replace(/\D/g, '');  // solo dígitos
+
+  // Clasificar campo "Contacto" libre (solo cubre lo que las columnas dedicadas no tienen)
+  const contactoClasif = _clasificarContacto(row.contacto ?? '');
+  const email    = (String(row.email    ?? '').trim() || contactoClasif.email).toLowerCase();
+  const telefono =  String(row.telefono ?? '').trim() || contactoClasif.telefono;
+  // Dirección: concatena localidad si existe y no está ya incluida
+  const dirBase  = String(row.direccion ?? '').trim();
+  const loc      = String(row.localidad ?? '').trim();
+  const direccion = dirBase && loc && !dirBase.toLowerCase().includes(loc.toLowerCase())
+    ? `${dirBase}, ${loc}`
+    : dirBase || loc;
+
+  // Pre-carga completa del formulario
+  document.getElementById('formCliente').reset();
+  document.getElementById('clienteId').value    = '';
+  document.getElementById('cliEstado').value    = 'Activo';
+  document.getElementById('cliNombre').value    = nombre;
+  document.getElementById('cliDni').value       = dni;
+  document.getElementById('cliEmail').value     = email;
+  document.getElementById('cliTelefono').value  = telefono;
+  document.getElementById('cliDireccion').value = direccion;
+  document.getElementById('modalClienteTitle').textContent = 'Nuevo Cliente (desde importador)';
+
+  // Registrar callback: actualiza TODAS las filas con el mismo propietario y re-valida
+  _importPostClienteGuardado = (clienteGuardado) => {
+    if (!clienteGuardado?.id) return;
+    const nombreNorm = _normImport(_importRows[idx]?.propietario ?? '');
+    const dniLimpio  = String(clienteGuardado.dni ?? '').replace(/[.\-\s]/g, '').toLowerCase();
+    let actualizadas = 0;
+    _importRows.forEach((row, i) => {
+      if (!row._propietario_no_encontrado) return;
+      const mismoNombre = nombreNorm && _normImport(row.propietario ?? '') === nombreNorm;
+      const mismoDni    = dniLimpio  && String(row.dni ?? '').replace(/[.\-\s]/g, '').toLowerCase() === dniLimpio;
+      if (mismoNombre || mismoDni) {
+        row._propietario_id            = clienteGuardado.id;
+        row._propietario_no_encontrado = false;
+        revalidarFila(i);
+        actualizadas++;
+      }
+    });
+    if (actualizadas > 1) showToast(`Propietario asignado a ${actualizadas} embarcaciones.`, 'success');
+    _renderImportPreview(_importEntity);
+  };
+
+  openModal('modalCliente');
+}
+
+/**
+ * Abre el modal de Nueva Categoría pre-cargado con el nombre del Excel.
+ * Al guardar, actualiza en masa TODAS las filas del importador que compartan
+ * el mismo nombre de categoría (normalizado), sin reprocesar el archivo.
+ */
+function _importCrearCategoria(nombreExcel) {
+  const nombreNorm = _normImport(nombreExcel);
+
+  // Pre-cargar el modal con el nombre normalizado
+  document.getElementById('formCategoria').reset();
+  document.getElementById('categoriaId').value = '';
+  document.getElementById('catNombre').value   = _titleCase(nombreExcel);
+  document.getElementById('modalCategoriaTitle').textContent = 'Nueva Categoría (desde importador)';
+
+  // Callback masivo: actualiza todas las filas con la misma categoría y re-valida
+  _importPostCategoriaGuardada = (catGuardada) => {
+    if (!catGuardada?.id) return;
+    let actualizadas = 0;
+    _importRows.forEach((row, i) => {
+      if (_normImport(row.categoria ?? '') === nombreNorm) {
+        row._categoria_id            = catGuardada.id;
+        row._categoria_no_encontrada = false;
+        revalidarFila(i);
+        actualizadas++;
+      }
+    });
+    if (actualizadas > 0) {
+      showToast(`Categoría "${catGuardada.nombre}" asignada a ${actualizadas} fila${actualizadas !== 1 ? 's' : ''}.`, 'success');
+      _renderImportPreview(_importEntity);
+    }
+  };
+
+  openModal('modalCategoria');
+}
+
+/** Función principal: parsea, cruza con DB y muestra la tabla de vista previa. */
+async function procesarImportacion(file) {
+  const btn = document.getElementById('btnProcesarImportacion');
+  setSubmitting(btn, true);
+  document.getElementById('importPreviewSection').hidden = true;
+  _importRows   = [];
+  _importEntity = null;
+
+  try {
+    const rawRows              = await _parsearArchivo(file);
+    const { entity, mappedRows } = _mapearColumnas(rawRows);
+    _importEntity              = entity;
+
+    if (!mappedRows.length) { showError('El archivo no contiene filas válidas.'); return; }
+
+    // Carga registros existentes para detección de duplicados
+    const existentes = entity === 'clientes'
+      ? await ClientesService.getAll()
+      : await EmbarcacionesService.getAll();
+
+    const claveMap = entity === 'clientes'
+      ? new Map(existentes.map(c => [String(c.dni ?? '').replace(/[.\-\s]/g, '').toLowerCase(), c]))
+      : new Map(existentes.map(e => [String(e.matricula ?? '').trim().toLowerCase(), e]));
+
+    // Para embarcaciones: carga adicional de clientes y categorías
+    let clienteNombreMap = new Map();
+    let clienteDniMap    = new Map();
+    let categoriasArr    = [];
+    if (entity === 'embarcaciones') {
+      const [todosClientes, todasCategorias] = await Promise.all([
+        ClientesService.getAll(),
+        CategoriasService.getAll(),
+      ]);
+      clienteNombreMap = new Map(todosClientes.map(c => [_normImport(c.nombre), c]));
+      clienteDniMap    = new Map(
+        todosClientes
+          .filter(c => c.dni)
+          .map(c => [String(c.dni).replace(/[.\-\s]/g, '').toLowerCase(), c])
+      );
+      categoriasArr = todasCategorias;
+    }
+
+    _importRows = mappedRows.map(row => {
+      const clave     = entity === 'clientes'
+        ? (row.dni       ?? '').replace(/[.\-\s]/g, '').toLowerCase()
+        : (row.matricula ?? '').trim().toLowerCase();
+      const existente = clave ? claveMap.get(clave) : null;
+      const errores   = _validarFilaImport(row, entity);
+
+      // Resolución de propietario y categoría (solo embarcaciones)
+      let _propietario_id           = null;
+      let _propietario_no_encontrado = false;
+      let _categoria_id             = null;
+      let _categoria_no_encontrada  = false;
+
+      if (entity === 'embarcaciones') {
+        const tieneDni  = row.dni?.trim();
+        const tieneNombre = row.propietario?.trim();
+        if (tieneDni || tieneNombre) {
+          let cli = null;
+          // 1. Búsqueda por DNI/CUIT (más confiable, sin ambigüedad)
+          if (tieneDni) cli = clienteDniMap.get(row.dni.toLowerCase());
+          // 2. Fallback: búsqueda por nombre normalizado
+          if (!cli && tieneNombre) cli = clienteNombreMap.get(_normImport(row.propietario));
+          if (cli) _propietario_id = cli.id;
+          else     _propietario_no_encontrado = true;
+        }
+        if (row.categoria?.trim()) {
+          const cat = _fuzzyCategoria(row.categoria, categoriasArr);
+          _categoria_id            = cat?.id ?? null;
+          _categoria_no_encontrada = !cat;
+        }
+      }
+
+      return {
+        ...row,
+        _propietario_id,
+        _propietario_no_encontrado,
+        _categoria_id,
+        _categoria_no_encontrada,
+        _errores:     errores,
+        _duplicado:   !!existente,
+        _existenteId: existente?.id ?? null,
+        _accion:      errores.length ? 'error' : (existente ? 'actualizar' : 'nuevo'),
+      };
+    });
+
+    _renderImportPreview(entity);
+  } catch (err) {
+    showError('No se pudo procesar el archivo: ' + err.message);
+  } finally {
+    setSubmitting(btn, false);
+  }
+}
+
+/** Renderiza la tabla de vista previa con validación y controles de acción. */
+function _renderImportPreview(entity) {
+  const nNuevos     = _importRows.filter(r => r._accion === 'nuevo').length;
+  const nDuplicados = _importRows.filter(r => r._duplicado).length;
+  const nErrores    = _importRows.filter(r => r._errores.length).length;
+
+  document.getElementById('importPreviewTitle').textContent =
+    entity === 'clientes' ? 'Vista previa — Clientes' : 'Vista previa — Embarcaciones';
+  document.getElementById('importPreviewStats').textContent =
+    `${_importRows.length} fila${_importRows.length !== 1 ? 's' : ''} detectada${_importRows.length !== 1 ? 's' : ''} · ${nNuevos} nuevos · ${nDuplicados} duplicados · ${nErrores} con errores`;
+
+  const cols   = entity === 'clientes'
+    ? ['nombre', 'dni', 'telefono', 'email', 'direccion']
+    : ['nombre', 'matricula', 'eslora', 'manga', 'propietario', 'categoria', 'notas'];
+  const labels = entity === 'clientes'
+    ? ['Nombre', 'DNI/RUC', 'Teléfono', 'Email', 'Dirección']
+    : ['Nombre', 'Matrícula', 'Eslora', 'Manga', 'Propietario', 'Categoría', 'Notas'];
+  const reqs   = entity === 'clientes' ? ['nombre', 'dni'] : ['nombre', 'matricula'];
+
+  document.getElementById('importPreviewHead').innerHTML = `<tr>
+    <th>Estado</th>
+    ${labels.map(l => `<th>${l}</th>`).join('')}
+    <th>Acción</th>
+  </tr>`;
+
+  document.getElementById('importPreviewBody').innerHTML = _importRows.map((row, i) => {
+    const tieneError = row._errores.length > 0;
+
+    const rowStyle = tieneError
+      ? 'style="background:rgba(239,68,68,.06)"'
+      : row._duplicado ? 'style="background:rgba(251,191,36,.07)"' : '';
+
+    const badge = tieneError
+      ? `<span class="badge badge-red" title="${escHTML(row._errores.join(', '))}">&#x2717; Error</span>`
+      : row._duplicado
+        ? '<span class="badge badge-yellow">&#x26A0; Duplicado</span>'
+        : '<span class="badge badge-green">&#x2713; Nuevo</span>';
+
+    const celdas = cols.map(col => {
+      const val   = row[col] ?? '';
+      const falta = reqs.includes(col) && !String(val).trim();
+      let extra   = '';
+
+      if (col === 'propietario' && entity === 'embarcaciones') {
+        if (row._propietario_id) {
+          extra = ' <span title="Propietario encontrado en BD" style="color:#16a34a;font-weight:700">&#x2713;</span>';
+        } else if (row._propietario_no_encontrado) {
+          extra =
+            ' <span title="No encontrado en BD" style="color:#d97706;cursor:help">&#x26A0;</span>' +
+            ` <button onclick="_importCrearCliente(${i})"
+                style="margin-left:4px;padding:1px 7px;font-size:11px;border:1px solid #d97706;
+                       border-radius:5px;background:#fffbeb;color:#92400e;cursor:pointer;
+                       white-space:nowrap">+ Crear Cliente</button>`;
+        }
+      }
+
+      if (col === 'categoria' && entity === 'embarcaciones') {
+        if (row._categoria_id) {
+          extra = ' <span title="Categoría encontrada en BD" style="color:#16a34a;font-weight:700">&#x2713;</span>';
+        } else if (row._categoria_no_encontrada) {
+          extra =
+            ' <span title="No encontrada en BD" style="color:#d97706;cursor:help">&#x26A0;</span>' +
+            ` <button onclick="_importCrearCategoria(${JSON.stringify(row.categoria ?? '')})"
+                style="margin-left:4px;padding:1px 7px;font-size:11px;border:1px solid #d97706;
+                       border-radius:5px;background:#fffbeb;color:#92400e;cursor:pointer;
+                       white-space:nowrap">+ Crear Categoría</button>`;
+        }
+      }
+
+      return `<td style="${falta ? 'background:rgba(239,68,68,.12);color:#b91c1c;font-weight:600' : ''}">
+        ${escHTML(String(val)) || '<em style="color:var(--text-muted)">—</em>'}${extra}
+      </td>`;
+    }).join('');
+
+    // Una fila de embarcación está "incompleta" si le falta propietario o categoría
+    const tieneIncompleto = entity === 'embarcaciones' &&
+      (row._propietario_no_encontrado || row._categoria_no_encontrada);
+
+    let accionCell;
+    if (tieneError) {
+      accionCell = '<em style="color:var(--text-muted);font-size:12px">Corregir en archivo</em>';
+    } else if (row._duplicado) {
+      const s = (a) => row._accion === a
+        ? 'background:var(--accent);color:#fff;border-color:var(--accent)'
+        : '';
+      const btnActualizar = tieneIncompleto
+        ? `<button class="btn btn-secondary" disabled
+               title="Completá propietario y categoría antes de actualizar"
+               style="padding:4px 10px;font-size:12px;opacity:.4;cursor:not-allowed">Actualizar</button>`
+        : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;${s('actualizar')}"
+               onclick="_setImportAccion(${i},'actualizar')">Actualizar</button>`;
+      accionCell = `<div style="display:flex;gap:5px">
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;${s('omitir')}"
+            onclick="_setImportAccion(${i},'omitir')">Omitir</button>
+        ${btnActualizar}
+      </div>`;
+    } else if (tieneIncompleto) {
+      accionCell = '<span style="font-size:12px;color:#d97706;font-weight:600">&#x26A0; Pendiente</span>';
+    } else {
+      accionCell = '<span style="font-size:12px;color:var(--accent);font-weight:600">Se importará</span>';
+    }
+
+    return `<tr ${rowStyle}>
+      <td>${badge}</td>
+      ${celdas}
+      <td>${accionCell}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('importPreviewSection').hidden = false;
+}
+
+/** Cambia la acción de una fila duplicada y re-renderiza. Llamado desde onclick inline. */
+function _setImportAccion(idx, accion) {
+  _importRows[idx]._accion = accion;
+  _renderImportPreview(_importEntity);
+}
+
+/** Guarda en Supabase todos los registros con acción 'nuevo' o 'actualizar'. */
+async function confirmarImportacion() {
+  const toSave = _importRows.filter(r => r._accion === 'nuevo' || r._accion === 'actualizar');
+  if (!toSave.length) {
+    showError('Sin registros para importar (todos omitidos o con errores).');
+    return;
+  }
+
+  const btn = document.getElementById('btnConfirmarImportacion');
+  setSubmitting(btn, true);
+
+  let ok = 0, errCount = 0;
+
+  for (const row of toSave) {
+    try {
+      if (_importEntity === 'clientes') {
+        await ClientesService.save({
+          id:        row._accion === 'actualizar' ? row._existenteId : undefined,
+          nombre:    row.nombre    ?? '',
+          dni:       row.dni       ?? '',
+          telefono:  row.telefono  ?? '',
+          email:     row.email     ?? '',
+          direccion: row.direccion ?? '',
+          estado:    'Activo',
+        });
+      } else {
+        await EmbarcacionesService.save({
+          id:            row._accion === 'actualizar' ? row._existenteId : undefined,
+          nombre:        row.nombre          ?? '',
+          matricula:     row.matricula       ?? '',
+          eslora:        row.eslora          || null,
+          manga:         row.manga           || null,
+          notas:         row.notas           ?? '',
+          propietario_id: row._propietario_id || null,
+          categoria_id:  row._categoria_id   || null,
+        });
+      }
+      ok++;
+    } catch (e) {
+      console.error('Import row error:', e.message, row);
+      errCount++;
+    }
+  }
+
+  const label = `${ok} registro${ok !== 1 ? 's' : ''} importado${ok !== 1 ? 's' : ''}`;
+  showToast(errCount ? `${label} · ${errCount} con error` : label, ok > 0 ? 'success' : 'error');
+
+  if (ok > 0) {
+    _importRows   = [];
+    _importEntity = null;
+    document.getElementById('importPreviewSection').hidden = true;
+    document.getElementById('importFileInput').value        = '';
+    document.getElementById('importFileName').textContent   = 'Sin archivo seleccionado';
+    document.getElementById('btnProcesarImportacion').disabled = true;
+    // Refresca la tabla afectada si el usuario está en Maestros
+    if (_activeSubTab === 'clientes')      await renderClientes();
+    else if (_activeSubTab === 'flota')    await renderEmbarcaciones();
+  }
+
+  setSubmitting(btn, false);
+}
+
+// ── Listeners de importación
+document.getElementById('importFileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  document.getElementById('importFileName').textContent       = file ? file.name : 'Sin archivo seleccionado';
+  document.getElementById('btnProcesarImportacion').disabled  = !file;
+  document.getElementById('importPreviewSection').hidden      = true;
+  _importRows = [];
+});
+
+const _importDropzone = document.getElementById('importDropzone');
+_importDropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  _importDropzone.style.borderColor = 'var(--accent)';
+  _importDropzone.style.background  = '#eff6ff';
+});
+_importDropzone.addEventListener('dragleave', () => {
+  _importDropzone.style.borderColor = 'var(--border)';
+  _importDropzone.style.background  = 'var(--bg)';
+});
+_importDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  _importDropzone.style.borderColor = 'var(--border)';
+  _importDropzone.style.background  = 'var(--bg)';
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const dt  = new DataTransfer();
+  dt.items.add(file);
+  const inp = document.getElementById('importFileInput');
+  inp.files = dt.files;
+  inp.dispatchEvent(new Event('change'));
+});
+
+document.getElementById('btnProcesarImportacion').addEventListener('click', () => {
+  const file = document.getElementById('importFileInput').files[0];
+  if (file) procesarImportacion(file);
+});
+
+document.getElementById('btnConfirmarImportacion').addEventListener('click', confirmarImportacion);
