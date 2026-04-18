@@ -43,7 +43,7 @@
 // ── CONFIGURACIÓN ─────────────────────────────────────────────────────────────
 
 const SUPABASE_URL      = 'https://gbbpqchthvosgstysyai.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_lh4Wb8A1egzw9V7ML1NP-g_U8ikMC27';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiYnBxY2h0aHZvc2dzdHlzeWFpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDgwNjIsImV4cCI6MjA5MTU4NDA2Mn0.duWBG8KPdrgfH8-VgdgVVl_fhF9kZdJZpvc3LuHBtyU';
 
 /**
  * Identificador de la guardería activa.

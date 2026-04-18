@@ -29,6 +29,22 @@
   --transition:   all 0.22s ease;
 }
 
+/* ─── MODO GASTOS — Steel Slate ───────────────────────────── */
+body.modo-gastos {
+  --navy:        #253341;
+  --navy-dark:   #16202a;
+  --navy-mid:    #2e4053;
+  --accent:      #26c6da;
+  --accent-dark: #00acc1;
+  --accent-glow: rgba(38,198,218,.18);
+  --bg:          #e2e8f2;
+  --surface:     #f4f7fa;
+  --surface-2:   #edf1f5;
+  --border:      #cdd5de;
+  --text:        #1c2b36;
+  --text-muted:  #5a7080;
+}
+
 /* ─── RESET ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -38,6 +54,7 @@ body {
   min-height: 100vh;
   font-size: 14px;
   line-height: 1.5;
+  transition: background 0.4s ease, color 0.4s ease;
 }
 
 /* ─── APP SHELL ───────────────────────────────────────────── */
@@ -57,7 +74,104 @@ body {
   gap: 0;
   box-shadow: 0 2px 20px rgba(0,0,0,.35);
   border-bottom: 1px solid rgba(255,255,255,.06);
+  overflow: hidden;
 }
+/* Overlay del gradiente gastos — se hace fade-in sobre el gradiente gestión */
+.topnav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #16202a 0%, #253341 60%, #2e4053 100%);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+body.modo-gastos .topnav::before { opacity: 1; }
+.topnav > * { position: relative; z-index: 1; }
+
+/* ─── MODE SWITCH TOGGLE ──────────────────────────────────── */
+.mode-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 0 14px 0 8px;
+  border-right: 1px solid rgba(255,255,255,.12);
+  margin-right: 10px;
+}
+.mode-sw-icon {
+  opacity: 0.38;
+  transition: opacity 0.3s ease, color 0.3s ease;
+  flex-shrink: 0;
+  color: #fff;
+}
+.mode-sw-icon.mode-sw-active { opacity: 1; }
+.mode-sw-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.38);
+  transition: color 0.3s;
+  white-space: nowrap;
+}
+.mode-sw-label.mode-sw-active { color: rgba(255,255,255,.9); }
+.mode-toggle {
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  background: rgba(0,0,0,.28);
+  border: 1px solid rgba(255,255,255,.22);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  transition: background 0.3s ease, border-color 0.3s ease;
+  flex-shrink: 0;
+}
+.mode-toggle:hover { background: rgba(0,0,0,.40); border-color: rgba(255,255,255,.38); }
+.mode-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.92);
+  transition: transform 0.35s cubic-bezier(.4,0,.2,1), background 0.35s ease;
+  box-shadow: 0 1px 5px rgba(0,0,0,.35);
+  pointer-events: none;
+}
+body.modo-gastos .mode-toggle-thumb {
+  transform: translateX(22px);
+  background: #26c6da;
+  box-shadow: 0 1px 8px rgba(38,198,218,.5);
+}
+
+/* ─── GASTOS PLACEHOLDER PANELS ──────────────────────────── */
+.gastos-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: center;
+  gap: 12px;
+  padding: 40px;
+}
+.gastos-placeholder svg { opacity: .35; }
+.gastos-placeholder h3 { font-size: 16px; font-weight: 700; color: var(--text); opacity: .7; }
+.gastos-placeholder p  { font-size: 13px; }
+
+/* Transición suave en cards y superficies clave al cambiar modo */
+.card, .sub-nav, .btn-primary, .btn-secondary, .modal-box {
+  transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+}
+.sub-tab-btn { transition: color .18s, border-color .18s, background .18s; }
 
 /* Brand */
 .topnav-brand {
@@ -1272,6 +1386,26 @@ body {
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast-success { background: #16a34a; }
 .toast-error   { background: var(--danger); }
+.toast-warning { background: #d97706; }
+.toast-info    { background: #2563eb; }
+
+/* ─── IMPORT MODE TOGGLE ───────────────────────────────────── */
+.import-mode-btn {
+  padding: 5px 18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-radius: 20px;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.import-mode-btn.import-mode-active {
+  background: var(--accent);
+  color: #fff;
+}
 
 /* ─── MULTISELECT COPROPIETARIOS ──────────────────────────── */
 .badge-titular {

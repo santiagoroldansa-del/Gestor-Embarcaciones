@@ -53,19 +53,41 @@
         <span class="brand-name">NaviGestor</span>
       </div>
 
-      <!-- Pestañas de navegación (solo 3) -->
+      <!-- Pestañas de navegación -->
       <div class="topnav-tabs" role="tablist">
-        <button class="tab-btn active" data-tab="inicio" role="tab" aria-selected="true">Inicio</button>
-        <button class="tab-btn" data-tab="facturacion" role="tab" aria-selected="false">Facturacion</button>
-        <button class="tab-btn" data-tab="reportes" role="tab" aria-selected="false">Reportes</button>
-        <button class="tab-btn" data-tab="prefectura" role="tab" aria-selected="false">
+        <!-- MODO GESTIÓN -->
+        <button class="tab-btn active modo-gestion-only" data-tab="inicio" role="tab" aria-selected="true">Inicio</button>
+        <button class="tab-btn modo-gestion-only" data-tab="facturacion" role="tab" aria-selected="false">Facturaci&#243;n</button>
+        <button class="tab-btn modo-gestion-only" data-tab="reportes" role="tab" aria-selected="false">Reportes</button>
+        <button class="tab-btn modo-gestion-only" data-tab="prefectura" role="tab" aria-selected="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 2a3 3 0 0 0-3 3v1H5a2 2 0 0 0-2 2v1h18V8a2 2 0 0 0-2-2h-4V5a3 3 0 0 0-3-3z"/><path d="M12 9v13"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
           Prefectura
         </button>
+        <!-- MODO GASTOS -->
+        <button class="tab-btn modo-gastos-only" data-tab="caja-diaria" role="tab" aria-selected="false" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+          Caja Diaria
+        </button>
+        <button class="tab-btn modo-gastos-only" data-tab="gastos-fijos" role="tab" aria-selected="false" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Gastos Fijos
+        </button>
+        <button class="tab-btn modo-gastos-only" data-tab="rentabilidad" role="tab" aria-selected="false" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          Rentabilidad
+        </button>
       </div>
 
-      <!-- Guarderia + Logout -->
+      <!-- Mode Switch + Guarderia + Logout -->
       <div class="topnav-user">
+        <!-- Toggle de modo GESTIÓN / GASTOS -->
+        <div class="mode-switch-wrap">
+          <svg id="modeSwIconGestion" class="mode-sw-icon mode-sw-active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" title="Gesti&#243;n"><circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="22"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
+          <button class="mode-toggle" id="btnModeSwitch" title="Cambiar a modo Gastos">
+            <span class="mode-toggle-thumb"></span>
+          </button>
+          <svg id="modeSwIconGastos" class="mode-sw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" title="Gastos"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
         <button class="btn-guarderia" id="btnPerfilGuarderia" title="Ver / editar perfil de la guarderia">
           <span id="nombreGuarderia">Mi Guarderia</span>
         </button>
@@ -246,6 +268,15 @@
           </div>
 
           <div class="card" style="padding:22px">
+            <!-- Selector de modo -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+              <span style="font-size:13px;font-weight:600;color:var(--text-muted)">Importar como:</span>
+              <div id="importModeToggle" style="display:inline-flex;border:1.5px solid var(--border);border-radius:24px;padding:3px;background:var(--bg);gap:2px">
+                <button type="button" class="import-mode-btn import-mode-active" data-mode="embarcaciones">&#9875; Embarcaciones</button>
+                <button type="button" class="import-mode-btn" data-mode="clientes">&#128100; Clientes</button>
+              </div>
+            </div>
+
             <div id="importDropzone" style="border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;background:var(--bg);transition:border-color .2s,background .2s;cursor:pointer">
               <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="38" height="38" style="opacity:.65"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
               <p style="margin:10px 0 8px;font-size:14px;color:var(--text)">Arrastr&#225; tu archivo aqu&#237; o</p>
@@ -258,6 +289,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 Procesar Archivo
               </button>
+              <button class="btn" id="btnOptimizarIA" hidden onclick="mapearConIA()"
+                  style="border:1px solid #7c3aed;color:#7c3aed;background:transparent;gap:5px">
+                &#10024; Re-analizar con IA
+              </button>
               <p style="font-size:12px;color:var(--text-muted);margin:0">
                 <strong>Clientes:</strong> columnas Nombre&#43;DNI &nbsp;&#183;&nbsp; <strong>Embarcaciones:</strong> columnas Nombre&#43;Matr&#237;cula
               </p>
@@ -268,14 +303,49 @@
           <div id="importPreviewSection" hidden style="margin-top:20px">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
               <div>
-                <h3 id="importPreviewTitle" style="font-size:15px;font-weight:700;margin:0">Vista previa</h3>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <h3 id="importPreviewTitle" style="font-size:15px;font-weight:700;margin:0">Vista previa</h3>
+                  <span id="importEntityBadge" hidden
+                      style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;
+                             letter-spacing:.3px;text-transform:uppercase"></span>
+                </div>
                 <p id="importPreviewStats" style="font-size:13px;color:var(--text-muted);margin:3px 0 0"></p>
               </div>
-              <button class="btn btn-primary" id="btnConfirmarImportacion">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
-                Confirmar Importaci&#243;n
+              <div style="display:flex;gap:8px">
+                <button class="btn" id="btnCancelarImportacion"
+                    onclick="cancelarImportacion()"
+                    style="border:1px solid #ef4444;color:#ef4444;background:transparent">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Cancelar
+                </button>
+                <button class="btn btn-primary" id="btnConfirmarImportacion">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirmar Importaci&#243;n
+                </button>
+              </div>
+            </div>
+            <!-- Tabla de selectores para columnas no mapeadas (oculta si todo fue mapeado) -->
+            <div id="colMappingSection" hidden
+                style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.25);
+                       border-radius:10px;padding:14px 18px;margin-bottom:14px">
+              <p style="font-size:13px;font-weight:600;color:#7c3aed;margin:0 0 10px">
+                &#10024; Mape&#225; cada columna del Excel a su campo interno — la IA lo hace autom&#225;ticamente:
+              </p>
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr>
+                    <th style="text-align:left;padding:4px 10px 6px 0;color:var(--text-muted);font-weight:600">Columna en el Excel</th>
+                    <th style="text-align:left;padding:4px 0 6px;color:var(--text-muted);font-weight:600">Campo interno</th>
+                  </tr>
+                </thead>
+                <tbody id="colMappingBody"></tbody>
+              </table>
+              <button class="btn btn-primary" onclick="aplicarDesdeSelectores()"
+                  style="margin-top:12px;font-size:12px;padding:5px 14px">
+                Aplicar mapeo manual
               </button>
             </div>
+
             <div class="card" style="overflow-x:auto">
               <table class="table">
                 <thead id="importPreviewHead"></thead>
@@ -645,6 +715,51 @@
         </div>
 
       </div><!-- /#tab-prefectura -->
+
+      <!-- ══ MODO GASTOS: CAJA DIARIA ═══════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-caja-diaria" role="tabpanel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Caja Diaria</h2>
+            <p class="panel-sub">Registro de ingresos y egresos del d&#237;a</p>
+          </div>
+        </div>
+        <div class="gastos-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" width="52" height="52"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+          <h3>Caja Diaria</h3>
+          <p>M&#243;dulo de ingresos y egresos diarios &mdash; Fase 5</p>
+        </div>
+      </div>
+
+      <!-- ══ MODO GASTOS: GASTOS FIJOS ══════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-gastos-fijos" role="tabpanel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Gastos Fijos</h2>
+            <p class="panel-sub">Sueldos, servicios, mantenimiento y gastos recurrentes</p>
+          </div>
+        </div>
+        <div class="gastos-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" width="52" height="52"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          <h3>Gastos Fijos</h3>
+          <p>Gesti&#243;n de gastos recurrentes y estructura de costos &mdash; Fase 5</p>
+        </div>
+      </div>
+
+      <!-- ══ MODO GASTOS: RENTABILIDAD ══════════════════════════════════════════ -->
+      <div class="tab-panel" id="tab-rentabilidad" role="tabpanel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Reportes de Rentabilidad</h2>
+            <p class="panel-sub">An&#225;lisis financiero, m&#225;rgenes y proyecciones</p>
+          </div>
+        </div>
+        <div class="gastos-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" width="52" height="52"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          <h3>Reportes de Rentabilidad</h3>
+          <p>Dashboard financiero con m&#225;rgenes y proyecciones &mdash; Fase 5</p>
+        </div>
+      </div>
 
     </div><!-- /.tab-content -->
   </div><!-- /.app-shell -->
@@ -1198,11 +1313,11 @@
   <div class="modal-overlay" id="modalConfirm">
     <div class="modal modal-sm">
       <div class="modal-header">
-        <h3>Confirmar eliminacion</h3>
+        <h3 id="confirmTitle">Confirmar eliminaci&#243;n</h3>
         <button class="modal-close" data-modal="modalConfirm">&times;</button>
       </div>
       <div class="modal-body">
-        <p id="confirmMessage">&#191;Estas seguro de que deseas eliminar este registro?</p>
+        <p id="confirmMessage" style="margin:0;line-height:1.55">&#191;Est&#225;s seguro de que quer&#233;s eliminar este registro?</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-modal="modalConfirm">Cancelar</button>

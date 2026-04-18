@@ -3,6 +3,42 @@
  * Todas las operaciones de datos pasan por la capa de servicios (async/await).
  */
 
+// ─── MODO APP (GESTIÓN / GASTOS) ─────────────────────────────────────────────
+
+let _modoApp = 'gestion';
+
+/**
+ * Alterna entre modo GESTIÓN (azul) y GASTOS (steel slate).
+ * Persiste la elección en localStorage.
+ */
+async function setModoApp(modo) {
+  _modoApp = modo;
+  const esGastos = modo === 'gastos';
+
+  document.body.classList.toggle('modo-gastos', esGastos);
+
+  // Icons del toggle
+  document.getElementById('modeSwIconGestion')?.classList.toggle('mode-sw-active', !esGastos);
+  document.getElementById('modeSwIconGastos')?.classList.toggle('mode-sw-active', esGastos);
+
+  // Tooltip del botón
+  const btn = document.getElementById('btnModeSwitch');
+  if (btn) btn.title = esGastos ? 'Volver a modo Gestión' : 'Cambiar a modo Gastos';
+
+  // Visibilidad de tabs
+  document.querySelectorAll('.modo-gestion-only').forEach(el => { el.hidden = esGastos; });
+  document.querySelectorAll('.modo-gastos-only').forEach(el => { el.hidden = !esGastos; });
+
+  // Activar tab por defecto del modo
+  await switchTab(esGastos ? 'caja-diaria' : 'inicio');
+
+  localStorage.setItem('modoApp', modo);
+}
+
+document.getElementById('btnModeSwitch')?.addEventListener('click', async () => {
+  await setModoApp(_modoApp === 'gestion' ? 'gastos' : 'gestion');
+});
+
 // ─── NAVEGACIÓN (TABS) ────────────────────────────────────────────────────────
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -196,10 +232,47 @@ function showToast(msg, type = 'success') {
 
 let pendingDeleteFn = null;
 
-function confirmDelete(message, onConfirm) {
-  document.getElementById('confirmMessage').textContent = message;
+function confirmDelete(message, onConfirm, { titulo = 'Confirmar eliminaci\u00f3n', btnLabel = 'Eliminar' } = {}) {
+  document.getElementById('confirmTitle').textContent     = titulo;
+  document.getElementById('confirmMessage').textContent   = message;
+  document.getElementById('confirmDeleteBtn').textContent = btnLabel;
   pendingDeleteFn = onConfirm;
   openModal('modalConfirm');
+}
+
+/**
+ * Safety Check para entidades principales (Clientes y Embarcaciones).
+ * Muestra el modal enriquecido con nombre dinámico y botón "Eliminar permanentemente".
+ * - tipo 'embarcacion' → hard-delete (EmbarcacionesService.delete)
+ * - tipo 'cliente'     → soft-delete / baja (ClientesService.deactivate), reversible
+ */
+async function confirmarEliminacion(id, tipo, nombre) {
+  const esCliente   = tipo === 'cliente';
+  const articulo    = esCliente ? 'al cliente' : 'la embarcaci\u00f3n';
+  const accionLabel = esCliente ? 'Dar de baja' : 'Eliminar permanentemente';
+  const detalle     = esCliente
+    ? 'El registro se conservar\u00e1 en el sistema con estado Baja. Pod\u00e9s reactivarlo m\u00e1s adelante.'
+    : 'Esta acci\u00f3n no se puede deshacer y podr\u00eda afectar otros registros vinculados.';
+
+  confirmDelete(
+    `Est\u00e1s por eliminar ${articulo} \u201c${nombre}\u201d. ${detalle}`,
+    async () => {
+      try {
+        if (esCliente) {
+          await ClientesService.deactivate(id);
+          await Promise.all([renderClientes(), renderDashboard()]);
+          showToast('Cliente dado de baja correctamente.', 'success');
+        } else {
+          await EmbarcacionesService.delete(id);
+          await Promise.all([renderEmbarcaciones(), renderDashboard()]);
+          showToast('Registro eliminado correctamente.', 'success');
+        }
+      } catch (err) {
+        showError('No se pudo completar la operaci\u00f3n: ' + err.message);
+      }
+    },
+    { titulo: '\u00bfConfirmar eliminaci\u00f3n?', btnLabel: accionLabel }
+  );
 }
 
 // El handler es async para poder awaitar el callback de eliminación.
@@ -907,14 +980,7 @@ async function editEmbarcacion(id) {
 async function removeEmbarcacion(id) {
   try {
     const emb = await EmbarcacionesService.getById(id);
-    confirmDelete(`¿Eliminar la embarcacion "${emb?.nombre}"?`, async () => {
-      try {
-        await EmbarcacionesService.delete(id);
-        await Promise.all([renderEmbarcaciones(), renderDashboard()]);
-      } catch (err) {
-        showError('No se pudo eliminar la embarcacion: ' + err.message);
-      }
-    });
+    confirmarEliminacion(id, 'embarcacion', emb?.nombre ?? id);
   } catch (err) {
     showError(err.message);
   }
@@ -1248,18 +1314,7 @@ async function editCliente(id) {
 async function removeCliente(id) {
   try {
     const c = await ClientesService.getById(id);
-    confirmDelete(
-      `¿Dar de baja al cliente "${c?.nombre}"?\nEl registro se conserva; solo se cambia el estado a Baja con la fecha de hoy.`,
-      async () => {
-        try {
-          await ClientesService.deactivate(id);
-          await Promise.all([renderClientes(), renderDashboard()]);
-          showToast('Cliente dado de baja.');
-        } catch (err) {
-          showError('No se pudo desactivar el cliente: ' + err.message);
-        }
-      }
-    );
+    confirmarEliminacion(id, 'cliente', c?.nombre ?? id);
   } catch (err) {
     showError(err.message);
   }
@@ -2791,7 +2846,9 @@ async function loadAppData() {
     }
   }).catch(() => {});
 
-  await switchTab('inicio');
+  // Restaurar modo app (gestión/gastos) desde la sesión anterior
+  const savedModo = localStorage.getItem('modoApp') ?? 'gestion';
+  await setModoApp(savedModo); // ya activa el tab correcto internamente
   // Pre-carga en background para acceso instantáneo al cambiar de pestaña
   renderCuotas().catch(console.error);
   renderDashboard().catch(console.error);
@@ -3144,9 +3201,17 @@ document.getElementById('btnExportarPNA').addEventListener('click', async () => 
 // ─── IMPORTACIÓN MASIVA ────────────────────────────────────────────────────────
 
 let _importRows                = [];
-let _importEntity              = null; // 'clientes' | 'embarcaciones'
+let _importEntity              = 'embarcaciones'; // 'clientes' | 'embarcaciones' — siempre en sync con el toggle
 let _importPostClienteGuardado  = null; // callback para re-validar fila tras crear cliente desde importador
 let _importPostCategoriaGuardada = null; // callback para actualizar filas tras crear categoría desde importador
+
+// Estado para el re-mapeo con IA (se pobla en procesarImportacion)
+let _rawRows              = []; // filas crudas del Excel, sin transformar
+let _columnasDesconocidas = []; // headers que no matchearon ningún patrón regex
+let _importClaveMap       = new Map(); // mapa de clave → registro existente (para detección de duplicados)
+let _importClienteNombreMap = new Map();
+let _importClienteDniMap    = new Map();
+let _importCategoriasArr    = [];
 
 /** Lee el archivo y devuelve array de objetos planos (una fila = un objeto). */
 // Keywords that identify a header row in an Excel sheet
@@ -3240,95 +3305,8 @@ async function _parsearArchivo(file) {
  * y normaliza cada fila al esquema que usan los servicios.
  */
 function _mapearColumnas(rawRows) {
-  if (!rawRows.length) return { entity: 'clientes', mappedRows: [] };
-
-  // Normalización de encabezados: sin tildes, minúsculas, sin chars especiales
-  const _normKey = s => String(s ?? '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\/\-\.\(\)_&,;:]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // Patrones de detección por campo (orden importa: más específico primero)
-  const PAT = {
-    propietario: /propietario|dueno|owner|titular|nombre.*apellido|apellido.*nombre|apellido/,
-    matricula:   /matricula|reginave|sigla|nro.*reg|num.*reg|registro/,
-    // DNI: solo palabras clave inequívocas — nunca "año", "hp", etc.
-    dni:         /\bdni\b|\bcuit\b|\bcuil\b|\bdoc\b|documento|\bruc\b/,
-    // Campos que NUNCA son DNI aunque coincidan con el patrón
-    _excluirDni: /\bano\b|año|construc|\bhp\b|potencia|\bkw\b|calado|motor|eslora|manga|largo|ancho|peso|\bid\b|marca|modelo|hidrau|serie|loa/,
-    nombre:      /nombre.*emb|nombre.*lancha|nombre.*barco|nombre.*veh|vehiculo|embarcacion|barco|boat/,
-    eslora:      /eslora|largo|length/,
-    manga:       /manga|beam|ancho/,
-    telefono:    /telefono|celular|phone|movil|\btel\b|\bcel\b/,
-    email:       /email|correo|mail/,
-    contacto:    /\bcontacto\b|\bcontact\b/,
-    direccion:   /direccion|domicilio|address|calle/,
-    localidad:   /localidad|ciudad|pueblo|partido|provincia/,
-    notas:       /notas|notes|observacion|comentario/,
-    categoria:   /categor|tipo.*emb|clase.*emb|tipo.*barco|\btipo\b|\bclase\b/,
-  };
-
-  /**
-   * Valida por contenido que una columna realmente contiene DNIs/CUITs.
-   * Muestrea hasta 30 filas: si ≥80 % tienen entre 7 y 11 dígitos → es DNI.
-   * "Año" tiene 4 dígitos → falla. "HP" tiene 1-3 → falla. DNI 7-8 → pasa. CUIT 11 → pasa.
-   */
-  const _validarContenidoDni = (colName) => {
-    const muestra = rawRows.slice(0, 30)
-      .map(r => String(r[colName] ?? '').replace(/[.\-\s]/g, ''))
-      .filter(v => v.length > 0);
-    if (!muestra.length) return false;
-    const validos = muestra.filter(v => /^\d{7,11}$/.test(v));
-    return validos.length / muestra.length >= 0.8;
-  };
-
-  // Pre-computa qué columnas son realmente DNI (header + contenido)
-  const dniCols = new Set(
-    Object.keys(rawRows[0]).filter(col => {
-      const key = _normKey(col);
-      return PAT.dni.test(key) && !PAT._excluirDni.test(key) && _validarContenidoDni(col);
-    })
-  );
-
-  const headersNorm = Object.keys(rawRows[0]).map(h => _normKey(h));
-  const entity = headersNorm.some(h => PAT.matricula.test(h) || PAT.eslora.test(h) || PAT.manga.test(h))
-    ? 'embarcaciones'
-    : 'clientes';
-
-  const mappedRows = rawRows.map(raw => {
-    const r = {};
-    Object.entries(raw).forEach(([k, v]) => {
-      const key = _normKey(k);
-      const val = String(v ?? '').trim();
-
-      // DNI — solo columnas pre-validadas por header Y contenido
-      if (dniCols.has(k))                                 { r.dni         = val.replace(/[.\-\s]/g, ''); return; }
-      // Propietario — antes que nombre genérico
-      if (PAT.propietario.test(key))                      { r.propietario = val; return; }
-      // Matrícula — antes que nombre genérico
-      if (PAT.matricula.test(key))                        { r.matricula   = val; return; }
-      // Nombre de embarcación (patrones específicos)
-      if (PAT.nombre.test(key))                           { r.nombre      = val; return; }
-      // Nombre genérico: no sobreescribe si ya fue asignado por un patrón específico
-      if (/\bnombre\b/.test(key))                         { r.nombre      = r.nombre || val; return; }
-
-      // Resto de campos
-      if (PAT.eslora.test(key))    r.eslora    = Number(v) || '';
-      if (PAT.manga.test(key))     r.manga     = Number(v) || '';
-      if (PAT.telefono.test(key))  r.telefono  = val;
-      if (PAT.email.test(key))     r.email     = val;
-      if (PAT.contacto.test(key))  r.contacto  = val;
-      if (PAT.direccion.test(key)) r.direccion = val;
-      if (PAT.localidad.test(key)) r.localidad = val;
-      if (PAT.notas.test(key))     r.notas     = val;
-      if (PAT.categoria.test(key)) r.categoria = val;
-    });
-    return r;
-  });
-
-  return { entity, mappedRows };
+  if (!rawRows.length) return { todasLasColumnas: [] };
+  return { todasLasColumnas: Object.keys(rawRows[0]) };
 }
 
 /** Devuelve array de strings con los errores de validación de la fila. */
@@ -3376,20 +3354,12 @@ function _fuzzyCategoria(nombre, categorias) {
   if (!nombre || !categorias.length) return null;
   const n = _normImport(nombre);
 
-  // 1. Exacta
-  let match = categorias.find(c => _normImport(c.nombre) === n);
-  if (match) return match;
+  // 1. Exacta (normalizada)
+  const exacta = categorias.find(c => _normImport(c.nombre) === n);
+  if (exacta) return exacta;
 
-  // 2. Contiene en cualquier dirección (solo si la cadena corta tiene ≥ 4 chars)
-  match = categorias.find(c => {
-    const cn = _normImport(c.nombre);
-    const shorter = n.length <= cn.length ? n : cn;
-    if (shorter.length < 4) return false;
-    return cn.includes(n) || n.includes(cn);
-  });
-  if (match) return match;
-
-  // 3. Dice sobre bigramas con umbral estricto del 80 %
+  // 2. Dice sobre bigramas — umbral estricto ≥ 80 %
+  // El paso "contains" fue eliminado: aceptaba subcadenas cortas sin control de similitud.
   let best = null, bestScore = 0;
   for (const c of categorias) {
     const score = _diceSim(n, _normImport(c.nombre));
@@ -3510,8 +3480,9 @@ function _importCrearCliente(idx) {
  * Al guardar, actualiza en masa TODAS las filas del importador que compartan
  * el mismo nombre de categoría (normalizado), sin reprocesar el archivo.
  */
-function _importCrearCategoria(nombreExcel) {
-  const nombreNorm = _normImport(nombreExcel);
+function _importCrearCategoria(idx) {
+  const nombreExcel = _importRows[idx]?.categoria ?? '';
+  const nombreNorm  = _normImport(nombreExcel);
 
   // Pre-cargar el modal con el nombre normalizado
   document.getElementById('formCategoria').reset();
@@ -3540,94 +3511,308 @@ function _importCrearCategoria(nombreExcel) {
   openModal('modalCategoria');
 }
 
-/** Función principal: parsea, cruza con DB y muestra la tabla de vista previa. */
+/**
+ * Si el mapeo por Regex dejó columnas sin reconocer, muestra un Toast de advertencia
+ * y habilita el botón "✨ Optimizar con IA" para que el usuario pueda invocar la IA.
+ * Si todas las columnas fueron mapeadas, oculta el botón.
+ */
+// Opciones de campo por entidad — usadas en los selectores de columnas
+function _getOpcionesCampo(entity) {
+  const base = [
+    { value: '',        label: '— Pendiente IA —'  },
+    { value: 'ignorar', label: '— Ignorar —'       },
+    { value: 'dni',     label: 'DNI / CUIT'        },
+    { value: 'telefono',label: 'Teléfono'          },
+    { value: 'email',   label: 'Email'             },
+    { value: 'notas',   label: 'Observaciones'     },
+  ];
+  if (entity === 'clientes') {
+    return [...base,
+      { value: 'nombre',    label: 'Nombre'         },
+      { value: 'apellido',  label: 'Apellido'       },
+      { value: 'direccion', label: 'Dirección'      },
+      { value: 'localidad', label: 'Localidad'      },
+    ];
+  }
+  // embarcaciones (default)
+  return [...base,
+    { value: 'nombre',      label: 'Nombre embarcación' },
+    { value: 'propietario', label: 'Propietario'        },
+    { value: 'matricula',   label: 'Matrícula'          },
+    { value: 'categoria',   label: 'Categoría'          },
+    { value: 'eslora',      label: 'Eslora'             },
+    { value: 'manga',       label: 'Manga'              },
+  ];
+}
+
+/**
+ * Muestra TODAS las columnas del archivo con un <select> vacío cada una.
+ * La IA los rellena automáticamente; el usuario puede ajustar manualmente.
+ */
+function notificarColumnasNoMapeadas(columnas, entity = _importEntity) {
+  const seccion = document.getElementById('colMappingSection');
+  const tbody   = document.getElementById('colMappingBody');
+
+  if (!columnas.length) { seccion.hidden = true; return; }
+
+  const opcionesHTML = _getOpcionesCampo(entity)
+    .map(o => `<option value="${escHTML(o.value)}">${escHTML(o.label)}</option>`)
+    .join('');
+
+  tbody.innerHTML = columnas.map(col => `
+    <tr>
+      <td style="padding:4px 10px 4px 0;color:var(--text);font-weight:500">${escHTML(col)}</td>
+      <td style="padding:4px 0">
+        <select data-col="${escHTML(col)}"
+            onchange="aplicarDesdeSelectores()"
+            style="font-size:12px;padding:3px 8px;border:1px solid var(--border);
+                   border-radius:6px;background:var(--surface);color:var(--text);width:100%;max-width:220px">
+          ${opcionesHTML}
+        </select>
+      </td>
+    </tr>`).join('');
+
+  seccion.hidden = false;
+}
+
+// Traducción: nombre que devuelve la IA → campo interno real del importador
+const _AI_A_INTERNO = {
+  // Embarcaciones
+  nombre_embarcacion: 'nombre',
+  propietario:        'propietario',
+  dni:                'dni',
+  matricula:          'matricula',
+  categoria:          'categoria',
+  telefono:           'telefono',
+  email:              'email',
+  eslora:             'eslora',
+  manga:              'manga',
+  notas:              'notas',
+  // Clientes
+  nombre:             'nombre',
+  apellido:           'apellido',
+  direccion:          'direccion',
+  localidad:          'localidad',
+};
+
+/**
+ * Llama a la Edge Function de Supabase (Gemini 1.5 Flash).
+ * 1. Envía _columnasDesconocidas al endpoint.
+ * 2. Actualiza el .value de cada <select> en #colMappingBody con la sugerencia.
+ * 3. Llama a aplicarDesdeSelectores() para volcar los valores a _importRows
+ *    y disparar _renderImportPreview(), limpiando datos erróneos (ej. años en DNI).
+ */
+async function mapearConIA() {
+  if (!_rawRows.length) return;
+
+  const btn = document.getElementById('btnOptimizarIA');
+  const textoOriginal = btn?.textContent ?? '✨ Re-analizar con IA';
+  if (btn) { btn.disabled = true; btn.textContent = '✨ Analizando…'; }
+
+  try {
+    // ── 1. Llamada a la Edge Function ────────────────────────────────────────
+    const todasLasColumnas = _rawRows.length ? Object.keys(_rawRows[0]) : [];
+
+    const res = await fetch(
+      'https://gbbpqchthvosgstysyai.supabase.co/functions/v1/mapear-columnas-ia',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY.trim(),
+        },
+        body: JSON.stringify({
+          columnasDesconocidas: _columnasDesconocidas,
+          todasLasColumnas,
+          entidad: _importEntity,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const detalle = await res.text();
+      throw new Error(`HTTP ${res.status}: ${detalle}`);
+    }
+
+    const { mapeo } = await res.json();
+
+    // ── 3. Actualiza los <select> de la tabla de mapeo ────────────────────────
+    const selects = document.querySelectorAll('#colMappingBody select[data-col]');
+    selects.forEach(sel => {
+      const colOriginal = sel.dataset.col;
+      const campoIA     = mapeo?.[colOriginal];
+      if (!campoIA) return;
+
+      const campoInterno = _AI_A_INTERNO[campoIA] ?? campoIA;
+
+      if ([...sel.options].some(o => o.value === campoInterno)) {
+        sel.value = campoInterno;
+      } else if (campoIA === 'ignorar') {
+        sel.value = 'ignorar';
+      }
+    });
+
+    // ── 4. Aplica lo que quedó en los selectores → datos + render ────────────
+    const columnasMapeadas = await aplicarDesdeSelectores(/* silencioso */ true);
+
+    // ── 5. Feedback ──────────────────────────────────────────────────────────
+    if (columnasMapeadas > 0) {
+      showToast(
+        `IA mapeó ${columnasMapeadas} columna${columnasMapeadas !== 1 ? 's' : ''} correctamente.`,
+        'success'
+      );
+    } else {
+      showToast('La IA no encontró mapeos útiles. Podés ajustar los selectores manualmente.', 'warning');
+    }
+
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+
+  } catch (err) {
+    showError('No se pudo conectar con la IA: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+  }
+}
+
+/**
+ * Lee todos los <select> de #colMappingBody, vuelca los valores a _importRows,
+ * re-resuelve propietario/categoría y llama a _renderImportPreview().
+ * Devuelve el número de columnas efectivamente mapeadas (no ignoradas).
+ * @param {boolean} silencioso — si true, no muestra toast propio (lo maneja el llamador)
+ */
+async function aplicarDesdeSelectores(silencioso = false) {
+  const selects = document.querySelectorAll('#colMappingBody select[data-col]');
+  let columnasMapeadas = 0;
+
+  // Reconstruye _importRows desde cero a partir de _rawRows + selectores actuales
+  _importRows = _rawRows.map(rawRow => {
+    const row = {};
+    selects.forEach(sel => {
+      const colOriginal = sel.dataset.col;
+      const valorSel    = sel.value;
+      if (!valorSel || valorSel === 'ignorar') return;
+      const campo = _AI_A_INTERNO[valorSel] ?? valorSel;
+      const val   = String(rawRow[colOriginal] ?? '').trim();
+      if (!val) return;
+      // Si ya existe ese campo en la fila (otra col lo mapeó antes), concatena con coma
+      if (row[campo]) {
+        row[campo] = `${row[campo]}, ${val}`;
+      } else {
+        row[campo] = val;
+      }
+    });
+
+    // Apellido + Nombre → combina en nombre si ambos presentes
+    if (row.apellido) {
+      row.nombre = row.nombre
+        ? `${row.apellido}, ${row.nombre}`
+        : row.apellido;
+      delete row.apellido;
+    }
+
+    return row;
+  });
+
+  // Cuenta columnas asignadas (excluye pendientes e ignoradas)
+  selects.forEach(sel => { if (sel.value && sel.value !== 'ignorar') columnasMapeadas++; });
+
+  // Resolución completa: propietario, categoría, duplicados, validación
+  _importRows = _importRows.map((row, i) => {
+    let _propietario_id = null, _propietario_no_encontrado = false;
+    let _categoria_id = null, _categoria_no_encontrada = false;
+
+    if (_importEntity === 'embarcaciones') {
+      if (row.dni?.trim() || row.propietario?.trim()) {
+        let cli = null;
+        if (row.dni) cli = _importClienteDniMap.get(row.dni.replace(/[.\-\s]/g, '').toLowerCase());
+        if (!cli && row.propietario) cli = _importClienteNombreMap.get(_normImport(row.propietario));
+        _propietario_id            = cli?.id ?? null;
+        _propietario_no_encontrado = !cli;
+      }
+      if (row.categoria?.trim()) {
+        const cat = _fuzzyCategoria(row.categoria, _importCategoriasArr);
+        _categoria_id            = cat?.id ?? null;
+        _categoria_no_encontrada = !cat;
+      }
+    }
+
+    const clave = _importEntity === 'clientes'
+      ? (row.dni ?? '').replace(/[.\-\s]/g, '').toLowerCase()
+      : (row.matricula ?? '').trim().toLowerCase();
+    const existente = clave ? _importClaveMap.get(clave) : null;
+    const errores   = _validarFilaImport(row, _importEntity);
+
+    return {
+      ...row,
+      _propietario_id,
+      _propietario_no_encontrado,
+      _categoria_id,
+      _categoria_no_encontrada,
+      _errores:     errores,
+      _duplicado:   !!existente,
+      _existenteId: existente?.id ?? null,
+      _accion:      errores.length ? 'error' : (existente ? 'actualizar' : 'nuevo'),
+    };
+  });
+
+  _renderImportPreview(_importEntity);
+
+  if (!silencioso && columnasMapeadas > 0) {
+    showToast(`Mapeo aplicado: ${columnasMapeadas} columna${columnasMapeadas !== 1 ? 's' : ''} asignada${columnasMapeadas !== 1 ? 's' : ''}.`, 'success');
+  }
+
+  return columnasMapeadas;
+}
+
+/** Función principal: parsea el archivo y delega el mapeo a la IA. */
+async function _cargarDatosBDParaEntidad(entity) {
+  const existentes = entity === 'clientes'
+    ? await ClientesService.getAll()
+    : await EmbarcacionesService.getAll();
+
+  _importClaveMap = entity === 'clientes'
+    ? new Map(existentes.map(c => [String(c.dni ?? '').replace(/[.\-\s]/g, '').toLowerCase(), c]))
+    : new Map(existentes.map(e => [String(e.matricula ?? '').trim().toLowerCase(), e]));
+
+  if (entity === 'embarcaciones') {
+    const [todosClientes, todasCategorias] = await Promise.all([
+      ClientesService.getAll(),
+      CategoriasService.getAll(),
+    ]);
+    _importClienteNombreMap = new Map(todosClientes.map(c => [_normImport(c.nombre), c]));
+    _importClienteDniMap    = new Map(
+      todosClientes.filter(c => c.dni)
+        .map(c => [String(c.dni).replace(/[.\-\s]/g, '').toLowerCase(), c])
+    );
+    _importCategoriasArr = todasCategorias;
+  }
+}
+
 async function procesarImportacion(file) {
   const btn = document.getElementById('btnProcesarImportacion');
   setSubmitting(btn, true);
   document.getElementById('importPreviewSection').hidden = true;
-  _importRows   = [];
-  _importEntity = null;
+  _importRows = [];
+  _rawRows    = [];
 
   try {
-    const rawRows              = await _parsearArchivo(file);
-    const { entity, mappedRows } = _mapearColumnas(rawRows);
-    _importEntity              = entity;
+    const rawRows = await _parsearArchivo(file);
+    if (!rawRows.length) { showError('El archivo no contiene filas válidas.'); return; }
 
-    if (!mappedRows.length) { showError('El archivo no contiene filas válidas.'); return; }
+    const { todasLasColumnas } = _mapearColumnas(rawRows);
+    _rawRows              = rawRows;
+    _columnasDesconocidas = todasLasColumnas;
 
-    // Carga registros existentes para detección de duplicados
-    const existentes = entity === 'clientes'
-      ? await ClientesService.getAll()
-      : await EmbarcacionesService.getAll();
+    // Muestra selectores vacíos para TODAS las columnas (la IA los rellena)
+    notificarColumnasNoMapeadas(todasLasColumnas, _importEntity);
+    document.getElementById('importPreviewSection').hidden = false;
+    document.getElementById('btnOptimizarIA').hidden       = false;
 
-    const claveMap = entity === 'clientes'
-      ? new Map(existentes.map(c => [String(c.dni ?? '').replace(/[.\-\s]/g, '').toLowerCase(), c]))
-      : new Map(existentes.map(e => [String(e.matricula ?? '').trim().toLowerCase(), e]));
+    // Precarga datos de BD para resolución posterior (propietario, categoría, duplicados)
+    await _cargarDatosBDParaEntidad(_importEntity);
 
-    // Para embarcaciones: carga adicional de clientes y categorías
-    let clienteNombreMap = new Map();
-    let clienteDniMap    = new Map();
-    let categoriasArr    = [];
-    if (entity === 'embarcaciones') {
-      const [todosClientes, todasCategorias] = await Promise.all([
-        ClientesService.getAll(),
-        CategoriasService.getAll(),
-      ]);
-      clienteNombreMap = new Map(todosClientes.map(c => [_normImport(c.nombre), c]));
-      clienteDniMap    = new Map(
-        todosClientes
-          .filter(c => c.dni)
-          .map(c => [String(c.dni).replace(/[.\-\s]/g, '').toLowerCase(), c])
-      );
-      categoriasArr = todasCategorias;
-    }
+    // Auto-trigger IA — mapea todas las columnas desde cero
+    await mapearConIA();
 
-    _importRows = mappedRows.map(row => {
-      const clave     = entity === 'clientes'
-        ? (row.dni       ?? '').replace(/[.\-\s]/g, '').toLowerCase()
-        : (row.matricula ?? '').trim().toLowerCase();
-      const existente = clave ? claveMap.get(clave) : null;
-      const errores   = _validarFilaImport(row, entity);
-
-      // Resolución de propietario y categoría (solo embarcaciones)
-      let _propietario_id           = null;
-      let _propietario_no_encontrado = false;
-      let _categoria_id             = null;
-      let _categoria_no_encontrada  = false;
-
-      if (entity === 'embarcaciones') {
-        const tieneDni  = row.dni?.trim();
-        const tieneNombre = row.propietario?.trim();
-        if (tieneDni || tieneNombre) {
-          let cli = null;
-          // 1. Búsqueda por DNI/CUIT (más confiable, sin ambigüedad)
-          if (tieneDni) cli = clienteDniMap.get(row.dni.toLowerCase());
-          // 2. Fallback: búsqueda por nombre normalizado
-          if (!cli && tieneNombre) cli = clienteNombreMap.get(_normImport(row.propietario));
-          if (cli) _propietario_id = cli.id;
-          else     _propietario_no_encontrado = true;
-        }
-        if (row.categoria?.trim()) {
-          const cat = _fuzzyCategoria(row.categoria, categoriasArr);
-          _categoria_id            = cat?.id ?? null;
-          _categoria_no_encontrada = !cat;
-        }
-      }
-
-      return {
-        ...row,
-        _propietario_id,
-        _propietario_no_encontrado,
-        _categoria_id,
-        _categoria_no_encontrada,
-        _errores:     errores,
-        _duplicado:   !!existente,
-        _existenteId: existente?.id ?? null,
-        _accion:      errores.length ? 'error' : (existente ? 'actualizar' : 'nuevo'),
-      };
-    });
-
-    _renderImportPreview(entity);
   } catch (err) {
     showError('No se pudo procesar el archivo: ' + err.message);
   } finally {
@@ -3643,8 +3828,22 @@ function _renderImportPreview(entity) {
 
   document.getElementById('importPreviewTitle').textContent =
     entity === 'clientes' ? 'Vista previa — Clientes' : 'Vista previa — Embarcaciones';
+  const claveLabel = entity === 'clientes' ? 'DNI' : 'matrícula';
   document.getElementById('importPreviewStats').textContent =
-    `${_importRows.length} fila${_importRows.length !== 1 ? 's' : ''} detectada${_importRows.length !== 1 ? 's' : ''} · ${nNuevos} nuevos · ${nDuplicados} duplicados · ${nErrores} con errores`;
+    `${_importRows.length} fila${_importRows.length !== 1 ? 's' : ''} · ` +
+    `${nNuevos} nuevo${nNuevos !== 1 ? 's' : ''} · ` +
+    `${nDuplicados} ya existe${nDuplicados !== 1 ? 'n' : ''} (misma ${claveLabel}) · ` +
+    `${nErrores} con error${nErrores !== 1 ? 'es' : ''}`;
+
+  // Badge de entidad destino
+  const badge = document.getElementById('importEntityBadge');
+  if (badge) {
+    const esClientes = entity === 'clientes';
+    badge.textContent = esClientes ? '→ Tabla: Clientes' : '→ Tabla: Embarcaciones';
+    badge.style.background = esClientes ? '#dbeafe' : '#d1fae5';
+    badge.style.color      = esClientes ? '#1d4ed8' : '#065f46';
+    badge.hidden = false;
+  }
 
   const cols   = entity === 'clientes'
     ? ['nombre', 'dni', 'telefono', 'email', 'direccion']
@@ -3664,13 +3863,13 @@ function _renderImportPreview(entity) {
     const tieneError = row._errores.length > 0;
 
     const rowStyle = tieneError
-      ? 'style="background:rgba(239,68,68,.06)"'
-      : row._duplicado ? 'style="background:rgba(251,191,36,.07)"' : '';
+      ? 'style="background:rgba(239,68,68,.07)"'
+      : row._duplicado ? 'style="background:rgba(249,115,22,.10);border-left:3px solid #f97316"' : '';
 
     const badge = tieneError
       ? `<span class="badge badge-red" title="${escHTML(row._errores.join(', '))}">&#x2717; Error</span>`
       : row._duplicado
-        ? '<span class="badge badge-yellow">&#x26A0; Duplicado</span>'
+        ? '<span class="badge badge-orange">&#x21BA; Ya existe</span>'
         : '<span class="badge badge-green">&#x2713; Nuevo</span>';
 
     const celdas = cols.map(col => {
@@ -3694,10 +3893,11 @@ function _renderImportPreview(entity) {
       if (col === 'categoria' && entity === 'embarcaciones') {
         if (row._categoria_id) {
           extra = ' <span title="Categoría encontrada en BD" style="color:#16a34a;font-weight:700">&#x2713;</span>';
-        } else if (row._categoria_no_encontrada) {
+        } else if (String(val).trim()) {
+          // Hay texto en el Excel pero no se encontró (o no llegó al 80%) → siempre naranja + botón
           extra =
             ' <span title="No encontrada en BD" style="color:#d97706;cursor:help">&#x26A0;</span>' +
-            ` <button onclick="_importCrearCategoria(${JSON.stringify(row.categoria ?? '')})"
+            ` <button onclick="_importCrearCategoria(${i})"
                 style="margin-left:4px;padding:1px 7px;font-size:11px;border:1px solid #d97706;
                        border-radius:5px;background:#fffbeb;color:#92400e;cursor:pointer;
                        white-space:nowrap">+ Crear Categoría</button>`;
@@ -3801,12 +4001,13 @@ async function confirmarImportacion() {
   showToast(errCount ? `${label} · ${errCount} con error` : label, ok > 0 ? 'success' : 'error');
 
   if (ok > 0) {
-    _importRows   = [];
-    _importEntity = null;
-    document.getElementById('importPreviewSection').hidden = true;
-    document.getElementById('importFileInput').value        = '';
-    document.getElementById('importFileName').textContent   = 'Sin archivo seleccionado';
-    document.getElementById('btnProcesarImportacion').disabled = true;
+    _importRows = [];
+    document.getElementById('importPreviewSection').hidden     = true;
+    document.getElementById('importFileInput').value            = '';
+    document.getElementById('importFileName').textContent       = 'Sin archivo seleccionado';
+    document.getElementById('btnProcesarImportacion').disabled  = true;
+    document.getElementById('btnOptimizarIA').hidden            = true;
+    document.getElementById('colMappingSection').hidden         = true;
     // Refresca la tabla afectada si el usuario está en Maestros
     if (_activeSubTab === 'clientes')      await renderClientes();
     else if (_activeSubTab === 'flota')    await renderEmbarcaciones();
@@ -3815,12 +4016,47 @@ async function confirmarImportacion() {
   setSubmitting(btn, false);
 }
 
+function cancelarImportacion() {
+  if (!confirm('¿Estás seguro de que querés cancelar? Se perderán los mapeos actuales.')) return;
+  _importRows                  = [];
+  _importPostClienteGuardado   = null;
+  _importPostCategoriaGuardada = null;
+  document.getElementById('importFileInput').value           = '';
+  document.getElementById('importFileName').textContent      = 'Sin archivo seleccionado';
+  document.getElementById('btnProcesarImportacion').disabled = true;
+  document.getElementById('importPreviewSection').hidden     = true;
+  document.getElementById('btnOptimizarIA').hidden           = true;
+  document.getElementById('colMappingSection').hidden        = true;
+}
+
+// ── Toggle modo de importación ──────────────────────────────────────────────
+document.querySelectorAll('#importModeToggle .import-mode-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (btn.classList.contains('import-mode-active')) return;
+    document.querySelectorAll('#importModeToggle .import-mode-btn')
+      .forEach(b => b.classList.remove('import-mode-active'));
+    btn.classList.add('import-mode-active');
+    _importEntity = btn.dataset.mode;
+
+    if (_rawRows.length) {
+      // Re-render selects con las opciones de la nueva entidad (vacíos)
+      notificarColumnasNoMapeadas(_columnasDesconocidas, _importEntity);
+      // Recargar datos de BD para la nueva entidad
+      await _cargarDatosBDParaEntidad(_importEntity);
+      // Re-lanzar IA con el nuevo esquema
+      await mapearConIA();
+    }
+  });
+});
+
 // ── Listeners de importación
 document.getElementById('importFileInput').addEventListener('change', e => {
   const file = e.target.files[0];
   document.getElementById('importFileName').textContent       = file ? file.name : 'Sin archivo seleccionado';
   document.getElementById('btnProcesarImportacion').disabled  = !file;
   document.getElementById('importPreviewSection').hidden      = true;
+  document.getElementById('btnOptimizarIA').hidden            = true;
+  document.getElementById('colMappingSection').hidden         = true;
   _importRows = [];
 });
 
